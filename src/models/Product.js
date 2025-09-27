@@ -10,11 +10,16 @@ const ProductSchema = new mongoose.Schema({
   price: { type: Number, required: true },
   quantity: { type: Number, default: 0 },
   weight: { type: Number },
-  images: [{ 
-    url: String,
-    alt: String,
-    isPrimary: { type: Boolean, default: false }
-  }],
+images: [{ 
+  url: String,
+  alt: String,
+  isPrimary: { type: Boolean, default: false },
+  publicId: String,
+  width: Number,
+  height: Number,
+  format: String,
+  bytes: Number
+}],
   imageUrl: { type: String }, // Keep for backward compatibility
   in_stock: { type: Boolean, default: true },
   created_at: { type: Date, default: Date.now },

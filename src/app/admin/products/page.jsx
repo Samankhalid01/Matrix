@@ -128,12 +128,34 @@ export default function ProductsPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validate required fields
+    if (!formData.product_name?.trim()) {
+      alert('Product name is required');
+      return;
+    }
+    if (!formData.category_id?.trim()) {
+      alert('Category is required');
+      return;
+    }
+    if (!formData.price || parseFloat(formData.price) <= 0) {
+      alert('Valid price is required');
+      return;
+    }
+    
     setLoading(true);
 
     try {
-      const url = showEditForm ? '/api/products' : '/api/products';
+      const url = '/api/products';
       const method = showEditForm ? 'PUT' : 'POST';
       const submitData = showEditForm ? { ...formData, product_id: editingProduct.product_id } : formData;
+
+      // Ensure numeric fields are properly formatted
+      submitData.price = parseFloat(formData.price);
+      submitData.quantity = parseInt(formData.quantity) || 0;
+      if (formData.weight) {
+        submitData.weight = parseFloat(formData.weight);
+      }
 
       const response = await fetch(url, {
         method,
@@ -145,12 +167,12 @@ export default function ProductsPage() {
 
       const result = await response.json();
       
-      if (result.success) {
+      if (response.ok && result.success) {
         alert(showEditForm ? 'Product updated successfully!' : 'Product added successfully!');
         resetForm();
         fetchProducts();
       } else {
-        throw new Error(result.message || 'Operation failed');
+        throw new Error(result.error || result.message || 'Operation failed');
       }
     } catch (error) {
       console.error('Submit error:', error);
@@ -292,7 +314,7 @@ export default function ProductsPage() {
                   <div className="aspect-square bg-gray-100 rounded-t-lg overflow-hidden">
                     {product.images && product.images.length > 0 ? (
                       <img
-                        src={`/uploads/${typeof product.images[0] === 'string' ? product.images[0] : product.images[0].url}`}
+                        src={typeof product.images[0] === 'string' ? product.images[0] : product.images[0].url}
                         alt={typeof product.images[0] === 'string' ? product.product_name : product.images[0].alt || product.product_name}
                         className="w-full h-full object-cover"
                       />
@@ -494,8 +516,7 @@ export default function ProductsPage() {
                       {formData.images.map((image, index) => (
                         <div key={index} className="relative">
                           <img
-                            src={`/uploads/${typeof image === 'string' ? image : image.url}`}
-                            alt={typeof image === 'string' ? `Product ${index + 1}` : image.alt || `Product ${index + 1}`}
+                               src={typeof image === 'string' ? image : image.url}                            alt={typeof image === 'string' ? `Product ${index + 1}` : image.alt || `Product ${index + 1}`}
                             className="w-full h-20 object-cover rounded-lg border"
                           />
                           <button

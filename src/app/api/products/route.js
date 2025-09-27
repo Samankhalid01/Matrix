@@ -43,12 +43,38 @@ export async function POST(req) {
     }
 
     // Get the next product ID
-    const lastProduct = await Product.findOne({}).sort({ product_id: -1 });
-    const nextProductId = lastProduct ? lastProduct.product_id + 1 : 1;
+// Get the highest product_id and increment by 1
+const lastProduct = await Product.findOne().sort({ product_id: -1 });
+let product_id = 1;
+
+if (lastProduct) {
+  product_id = lastProduct.product_id + 1;
+} else {
+  // If no products exist, start from 1
+  const productCount = await Product.countDocuments();
+  product_id = productCount + 1;
+}
+
+// Double-check for uniqueness (in case of race conditions)
+const existingProduct = await Product.findOne({ product_id });
+if (existingProduct) {
+  // Find the next available ID
+  const allIds = await Product.find({}, { product_id: 1 }).sort({ product_id: 1 });
+  const usedIds = allIds.map(p => p.product_id);
+  
+  for (let i = 1; i <= usedIds.length + 1; i++) {
+    if (!usedIds.includes(i)) {
+      product_id = i;
+      break;
+    }
+  }
+}
+
+console.log('Assigning product_id:', product_id);
 
     // Generate QR code data URL
     const productInfo = {
-      id: nextProductId,
+      id: product_id,
       name: product_name,
       price: price
     };
@@ -56,7 +82,7 @@ export async function POST(req) {
 
     // Create new product
     const newProduct = new Product({
-      product_id: nextProductId,
+      product_id: product_id,
       product_name,
       description,
       category_id,
@@ -144,8 +170,11 @@ export async function DELETE(req) {
   try {
     await connectDB();
     
-    const { searchParams } = new URL(req.url);
-    const product_id = searchParams.get('product_id');
+    // Get request body
+    const body = await req.json();
+    const product_id = body.product_id;
+
+    console.log('Delete request received for product_id:', product_id);
 
     if (!product_id) {
       return NextResponse.json(
@@ -154,18 +183,41 @@ export async function DELETE(req) {
       );
     }
 
-    const deletedProduct = await Product.findOneAndDelete({ product_id });
+    // First, find the product to get image public IDs
+    const productToDelete = await Product.findOne({ product_id: parseInt(product_id) });
 
-    if (!deletedProduct) {
+    if (!productToDelete) {
       return NextResponse.json(
         { success: false, message: 'Product not found' },
         { status: 404 }
       );
     }
 
+    console.log('Found product to delete:', productToDelete.product_name);
+
+    // Delete images from Cloudinary if they exist
+    if (productToDelete.images && productToDelete.images.length > 0) {
+      const { deleteFromCloudinary } = await import('../../../lib/cloudinary');
+      
+      for (const image of productToDelete.images) {
+        if (image.publicId) {
+          try {
+            await deleteFromCloudinary(image.publicId);
+            console.log(`Deleted image from Cloudinary: ${image.publicId}`);
+          } catch (cloudinaryError) {
+            console.warn(`Failed to delete image from Cloudinary: ${image.publicId}`, cloudinaryError);
+            // Continue with product deletion even if image deletion fails
+          }
+        }
+      }
+    }
+
+    // Now delete the product from database
+    const deletedProduct = await Product.findOneAndDelete({ product_id: parseInt(product_id) });
+
     return NextResponse.json({
       success: true,
-      message: 'Product deleted successfully',
+      message: 'Product and associated images deleted successfully',
       data: deletedProduct
     });
 

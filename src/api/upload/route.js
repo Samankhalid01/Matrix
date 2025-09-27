@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-import { existsSync } from 'fs';
+import { uploadToCloudinary } from '../lib/cloudinary';
 
 export async function POST(request) {
   try {
@@ -23,7 +21,7 @@ export async function POST(request) {
     }
     
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    const maxSize = 5 * 1024 * 1024; // 5MB
+    const maxSize = 5 * 1024 * 1024;
     
     for (const file of files) {
       if (!allowedTypes.includes(file.type)) {
@@ -41,11 +39,6 @@ export async function POST(request) {
       }
     }
     
-    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true });
-    }
-    
     const uploadedImages = [];
     
     for (let i = 0; i < files.length; i++) {
@@ -53,16 +46,22 @@ export async function POST(request) {
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
       
-      const fileExtension = path.extname(file.name);
-      const filename = `${Date.now()}-${i}-${Math.random().toString(36).substring(7)}${fileExtension}`;
-      const filepath = path.join(uploadsDir, filename);
-      
-      await writeFile(filepath, buffer);
+      // Upload to Cloudinary
+      const publicId = `matrix/products/${Date.now()}-${i}-${Math.random().toString(36).substring(7)}`;
+      const result = await uploadToCloudinary(buffer, { 
+        public_id: publicId,
+        folder: 'matrix/products'
+      });
       
       uploadedImages.push({
-        url: `/uploads/${filename}`,
+        url: result.secure_url,
         alt: file.name,
-        isPrimary: i === 0
+        isPrimary: i === 0,
+        publicId: result.public_id,
+        width: result.width,
+        height: result.height,
+        format: result.format,
+        bytes: result.bytes
       });
     }
     

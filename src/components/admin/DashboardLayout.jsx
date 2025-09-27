@@ -9,6 +9,7 @@ const DashboardLayout = ({ children }) => {
     { title: 'Products', icon: '📦', path: '/admin/products' },
     { title: 'Customer Management', icon: '👥', path: '/admin/customers' },
     { title: 'Analytics', icon: '📈', path: '/admin/analytics' },
+    { title: 'Generate Ad Images', icon: '🎨', path: '/admin/image-generation' },
     { title: 'Surveillance Monitor', icon: '🛡️', path: '/admin/surveillance-monitoring' },
     { title: 'Theft Detection', icon: '🎥', path: '/admin/theft-detection' },
     { title: 'Notifications', icon: '🔔', path: '/admin/notifications' },

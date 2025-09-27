@@ -426,7 +426,7 @@ export default function SurveillanceTheftDetection() {
                     <div>
                       <span className="text-gray-600">Confidence:</span>
                       <span className="ml-2 font-semibold text-gray-900">
-                        {Math.round((incident.confidence_avg || 0) * 100)}%
+                        {Math.round(incident.confidence_avg || 0)}%
                       </span>
                     </div>
                     <div>
@@ -520,17 +520,49 @@ export default function SurveillanceTheftDetection() {
                   </button>
                 </div>
 
-                {/* Video Player Placeholder */}
+                {/* Video Player */}
                 <div className="bg-gray-900 rounded-lg mb-6 h-64 flex items-center justify-center">
-                  <div className="text-center text-white">
-                    <Video className="w-16 h-16 mx-auto mb-4" />
-                    <p className="text-lg font-medium">{selectedIncident.video_file}</p>
-                    <p className="text-sm text-gray-300 mt-2">
-                      {selectedIncident.detection_count} suspicious activities detected
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Video playback: http://localhost:5000/surveillance/video/{selectedIncident.incident_id}
-                    </p>
+                  <div className="w-full h-full">
+                    <video 
+                      controls 
+                      className="w-full h-full object-contain"
+                      poster="/api/placeholder/400/240"
+                      onError={(e) => {
+                        console.error('Video loading error:', e);
+                        e.target.style.display = 'none';
+                        e.target.nextElementSibling.style.display = 'flex';
+                      }}
+                    >
+                      <source 
+                        src={`http://localhost:5000/surveillance/video/${selectedIncident.incident_id}`} 
+                        type="video/mp4" 
+                      />
+                      <source 
+                        src={`http://localhost:5000/videos/${selectedIncident.video_file}`} 
+                        type="video/mp4" 
+                      />
+                      Your browser does not support the video tag.
+                    </video>
+                    
+                    {/* Fallback display if video fails to load */}
+                    <div className="text-center text-white h-full items-center justify-center" style={{ display: 'none' }}>
+                      <Video className="w-16 h-16 mx-auto mb-4" />
+                      <p className="text-lg font-medium">{selectedIncident.video_file}</p>
+                      <p className="text-sm text-gray-300 mt-2">
+                        {selectedIncident.detection_count} suspicious activities detected
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Video URL: http://localhost:5000/surveillance/video/{selectedIncident.incident_id}
+                      </p>
+                      <a 
+                        href={`http://localhost:5000/surveillance/video/${selectedIncident.incident_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                      >
+                        Open Video in New Tab
+                      </a>
+                    </div>
                   </div>
                 </div>
 
@@ -551,7 +583,7 @@ export default function SurveillanceTheftDetection() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Confidence:</span>
-                        <span className="font-semibold">{Math.round((selectedIncident.confidence_avg || 0) * 100)}%</span>
+                        <span className="font-semibold">{Math.round(selectedIncident.confidence_avg || 0)}%</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Detections:</span>

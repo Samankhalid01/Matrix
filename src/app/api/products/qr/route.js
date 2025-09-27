@@ -9,11 +9,8 @@ export async function POST(request) {
       return NextResponse.json({ success: false, error: 'Product ID is required' }, { status: 400 });
     }
 
-    // Generate QR code with product information
-    const productUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/product/${productId}`;
-    
-    // Generate QR code as data URL
-    const qrCodeDataUrl = await QRCode.toDataURL(productUrl, {
+    // Generate QR code with only product ID
+    const qrCodeDataUrl = await QRCode.toDataURL(productId.toString(), {
       width: 200,
       margin: 2,
       color: {
@@ -25,7 +22,7 @@ export async function POST(request) {
     return NextResponse.json({
       success: true,
       qrCode: qrCodeDataUrl,
-      productUrl: productUrl
+      productId: productId
     });
 
   } catch (error) {

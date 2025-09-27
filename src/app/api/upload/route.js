@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import path from 'path';
-import { writeFile, mkdir } from 'fs/promises';
+import { uploadToCloudinary } from '../../../lib/cloudinary';
 
 export async function POST(req) {
   try {
@@ -26,16 +25,14 @@ export async function POST(req) {
     for (const file of files) {
       if (file.size === 0) continue;
 
-      // Validate file type
-      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
       if (!validTypes.includes(file.type)) {
         return NextResponse.json(
-          { success: false, message: 'Only JPEG, PNG, and WebP images are allowed' },
+          { success: false, message: 'Only JPEG, PNG, GIF and WebP images are allowed' },
           { status: 400 }
         );
       }
 
-      // Validate file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         return NextResponse.json(
           { success: false, message: 'File size should not exceed 5MB' },
@@ -46,35 +43,32 @@ export async function POST(req) {
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
 
-      // Generate unique filename
+      // Upload to Cloudinary
       const timestamp = Date.now();
       const originalName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const fileName = `${timestamp}_${originalName}`;
+      const publicId = `matrix/products/${timestamp}_${originalName}`;
       
-      // Create uploads directory if it doesn't exist
-      const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-      try {
-        await mkdir(uploadsDir, { recursive: true });
-      } catch (error) {
-        // Directory might already exist, ignore error
-      }
+      const result = await uploadToCloudinary(buffer, { 
+        public_id: publicId,
+        folder: 'matrix/products'
+      });
 
-      // Write file
-      const filePath = path.join(uploadsDir, fileName);
-      await writeFile(filePath, buffer);
-
-      // Return the public URL path
       uploadedFiles.push({
-        url: `/uploads/${fileName}`,
+        url: result.secure_url,
         originalName: file.name,
         size: file.size,
-        type: file.type
+        type: file.type,
+        publicId: result.public_id,
+        width: result.width,
+        height: result.height,
+        format: result.format,
+        bytes: result.bytes
       });
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Files uploaded successfully',
+      message: 'Files uploaded successfully to Cloudinary',
       files: uploadedFiles
     });
 

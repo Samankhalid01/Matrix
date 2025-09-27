@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Large files
+*.h5
+*.mp4
+python-services/theft-detection/models/
+python-services/theft-detection/videos/
