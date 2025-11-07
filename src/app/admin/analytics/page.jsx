@@ -71,9 +71,70 @@ const AnalyticsPage = () => {
   if (loading) {
     return (
       <div className="p-6">
-        <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-          <p className="text-gray-600 mt-4">Loading analytics...</p>
+        {/* Header Shimmer */}
+        <div className="flex justify-between items-center mb-8 animate-pulse">
+          <div>
+            <div className="h-8 bg-gray-300 rounded w-64 mb-2"></div>
+            <div className="h-4 bg-gray-200 rounded w-80"></div>
+          </div>
+          <div className="h-10 bg-gray-200 rounded w-40"></div>
+        </div>
+
+        {/* Stats Cards Shimmer */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white p-6 rounded-lg shadow-sm border animate-pulse">
+              <div className="h-4 bg-gray-200 rounded w-24 mb-3"></div>
+              <div className="h-8 bg-gray-300 rounded w-32 mb-2"></div>
+              <div className="h-3 bg-gray-200 rounded w-16"></div>
+            </div>
+          ))}
+        </div>
+
+        {/* Charts Grid Shimmer */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          {/* Sales Chart Shimmer */}
+          <div className="bg-white p-6 rounded-lg shadow-sm border">
+            <div className="h-6 bg-gray-300 rounded w-32 mb-4 animate-pulse"></div>
+            <div className="space-y-4">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center justify-between animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-20"></div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-32 bg-gray-200 rounded-full h-2"></div>
+                    <div className="h-4 bg-gray-200 rounded w-16"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Top Products Shimmer */}
+          <div className="bg-white p-6 rounded-lg shadow-sm border">
+            <div className="h-6 bg-gray-300 rounded w-32 mb-4 animate-pulse"></div>
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-32"></div>
+                  <div className="h-4 bg-gray-200 rounded w-16"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Additional Cards Shimmer */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-white p-6 rounded-lg shadow-sm border">
+              <div className="h-6 bg-gray-300 rounded w-40 mb-4 animate-pulse"></div>
+              <div className="space-y-3">
+                {[1, 2, 3].map((j) => (
+                  <div key={j} className="h-4 bg-gray-200 rounded animate-pulse"></div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );

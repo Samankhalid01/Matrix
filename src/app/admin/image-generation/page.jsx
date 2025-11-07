@@ -3,8 +3,6 @@ import { useState } from 'react';
 
 export default function ImageGenerationPage() {
   const [prompt, setPrompt] = useState('');
-  const [numberOfImages, setNumberOfImages] = useState(1);
-  const [aspectRatio, setAspectRatio] = useState('1:1');
   const [loading, setLoading] = useState(false);
   const [generatedImages, setGeneratedImages] = useState([]);
   const [error, setError] = useState('');
@@ -13,47 +11,37 @@ export default function ImageGenerationPage() {
   // Test API connectivity
   const testApiConnection = async () => {
     try {
-      console.log('Testing API connection...');
+      console.log('Testing Cloudflare Worker API connection...');
       
-      // Test the simple test route first
-      const testResponse = await fetch('/api/test', {
-        method: 'GET'
-      });
-      
-      if (testResponse.ok) {
-        const testData = await testResponse.json();
-        setApiStatus(`🔍 Test Route: ✅ ${testData.message}`);
-      } else {
-        setApiStatus(`🔍 Test Route: ❌ ${testResponse.status}`);
-        return;
-      }
-      
-      // Now test the imagen route
-      const response = await fetch('/api/imagen', {
-        method: 'GET'
+      const response = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: 'test connection'
+        })
       });
       
       console.log('API Test - Response status:', response.status);
       
       if (response.ok) {
         const data = await response.json();
-        setApiStatus(`✅ Both APIs Connected: ${data.message}`);
+        if (data.success) {
+          setApiStatus(`✅ Cloudflare API Connected: ${data.message}`);
+        } else {
+          setApiStatus(`⚠️ Cloudflare API Response: ${data.message || 'Unknown response'}`);
+        }
       } else {
         const errorText = await response.text();
-        setApiStatus(`❌ Imagen API Error: ${response.status} - ${errorText.substring(0, 100)}...`);
+        setApiStatus(`❌ Cloudflare API Error: ${response.status} - ${errorText.substring(0, 100)}...`);
       }
     } catch (err) {
       setApiStatus(`❌ Connection Failed: ${err.message}`);
     }
   };
 
-  const aspectRatios = [
-    { label: 'Square (1:1)', value: '1:1' },
-    { label: 'Portrait (3:4)', value: '3:4' },
-    { label: 'Landscape (4:3)', value: '4:3' },
-    { label: 'Mobile (9:16)', value: '9:16' },
-    { label: 'Widescreen (16:9)', value: '16:9' }
-  ];
+
 
   const handleGenerateImages = async () => {
     if (!prompt.trim()) {
@@ -65,34 +53,57 @@ export default function ImageGenerationPage() {
     setError('');
     
     try {
-      const response = await fetch('/api/imagen', {
+      const response = await fetch('/api/generate-image', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          prompt: prompt.trim(),
-          numberOfImages,
-          aspectRatio
+          prompt: prompt.trim()
         }),
       });
 
       console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers);
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Response error text:', errorText);
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+        const errorData = await response.json();
+        console.error('Response error:', errorData);
+        throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('API Response:', data);
 
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to generate images');
+      if (data.success && data.imageUrl) {
+        // Validate the image data
+        const imageUrl = data.imageUrl;
+        console.log('Received imageUrl type:', imageUrl.startsWith('data:image/'));
+        
+        // Check if it's a valid data URL
+        if (imageUrl.startsWith('data:image/')) {
+          setGeneratedImages([{
+            imageBytes: imageUrl.includes('base64,') ? imageUrl.split(',')[1] : null,
+            fullImageUrl: imageUrl, // Store the full data URL
+            isMock: data.isPlaceholder || false,
+            isPlaceholder: data.isPlaceholder || false,
+            aiEnhanced: !data.isPlaceholder,
+            aiDescription: data.isPlaceholder 
+              ? `Placeholder image - Fix Cloudflare Worker for AI generation` 
+              : `Generated with Cloudflare AI: ${prompt.trim()}`
+          }]);
+          
+          if (data.isPlaceholder) {
+            setError('Cloudflare Worker is not working. Showing placeholder image. Please check your Worker configuration.');
+          }
+        } else {
+          throw new Error('Invalid image format received');
+        }
+      } else if (data.message) {
+        // Handle text responses from worker
+        setError(`Worker Response: ${data.message}. Please update your Worker code to generate images.`);
+      } else {
+        throw new Error('Invalid response format from API');
       }
-
-      setGeneratedImages(data.data.images);
       
     } catch (err) {
       setError(err.message || 'Failed to generate images');
@@ -133,21 +144,21 @@ export default function ImageGenerationPage() {
       <div className="bg-white rounded-lg shadow-md p-6">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Generate Advertisement Images</h1>
         <p className="text-gray-600 mb-4">
-          Create stunning advertisement images using Google&apos;s Imagen AI. Perfect for discount promotions, product showcases, and marketing campaigns.
+          Create stunning advertisement images using Cloudflare AI. Perfect for discount promotions, product showcases, and marketing campaigns.
         </p>
         
         {/* API Test Section */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-medium text-blue-900">API Status</h3>
-              <p className="text-sm text-blue-700">{apiStatus || 'Click test to check API connection'}</p>
+              <h3 className="font-medium text-blue-900">Cloudflare AI Status</h3>
+              <p className="text-sm text-blue-700">{apiStatus || 'Click test to check Cloudflare Worker connection'}</p>
             </div>
             <button
               onClick={testApiConnection}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
             >
-              🔍 Test API
+              🔍 Test Cloudflare API
             </button>
           </div>
         </div>
@@ -175,46 +186,6 @@ export default function ImageGenerationPage() {
             </div>
           </div>
 
-          {/* Options */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Number of Images */}
-            <div>
-              <label htmlFor="numberOfImages" className="block text-sm font-medium text-gray-700 mb-2">
-                Number of Images
-              </label>
-              <select
-                id="numberOfImages"
-                value={numberOfImages}
-                onChange={(e) => setNumberOfImages(parseInt(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value={1}>1 Image</option>
-                <option value={2}>2 Images</option>
-                <option value={3}>3 Images</option>
-                <option value={4}>4 Images</option>
-              </select>
-            </div>
-
-            {/* Aspect Ratio */}
-            <div>
-              <label htmlFor="aspectRatio" className="block text-sm font-medium text-gray-700 mb-2">
-                Aspect Ratio
-              </label>
-              <select
-                id="aspectRatio"
-                value={aspectRatio}
-                onChange={(e) => setAspectRatio(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {aspectRatios.map((ratio) => (
-                  <option key={ratio.value} value={ratio.value}>
-                    {ratio.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
           {/* Generate Button */}
           <button
             onClick={handleGenerateImages}
@@ -234,7 +205,7 @@ export default function ImageGenerationPage() {
                 Generating Images...
               </span>
             ) : (
-              '🎨 Generate Advertisement Images'
+              '🎨 Generate with Cloudflare AI'
             )}
           </button>
 
@@ -262,21 +233,41 @@ export default function ImageGenerationPage() {
             {generatedImages.map((image, index) => (
               <div key={index} className="bg-gray-50 rounded-lg p-4">
                 <div className="relative group">
-                  {image.isMock ? (
-                    // Mock image placeholder
-                    <div className="w-full h-64 bg-gradient-to-br from-blue-400 to-purple-500 rounded-lg flex items-center justify-center">
-                      <div className="text-center text-white">
-                        <div className="text-4xl mb-2">🎨</div>
-                        <p className="text-sm font-medium">Generated Image {index + 1}</p>
-                        <p className="text-xs opacity-75 mt-1">Mock Preview</p>
+                  {image.isMock || image.isPlaceholder ? (
+                    // Placeholder or mock image
+                    <div className="w-full h-64 rounded-lg overflow-hidden">
+                      {image.fullImageUrl ? (
+                        <img
+                          src={image.fullImageUrl}
+                          alt={`Generated placeholder ${index + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            console.error('Placeholder image failed to load:', e);
+                            // Fallback to simple colored div
+                            e.target.style.display = 'none';
+                            e.target.nextSibling.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+                      <div className="w-full h-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center" style={{display: 'none'}}>
+                        <div className="text-center text-white">
+                          <div className="text-4xl mb-2">🎨</div>
+                          <p className="text-sm font-medium">Generated Image {index + 1}</p>
+                          <p className="text-xs opacity-75 mt-1">Worker Configuration Needed</p>
+                        </div>
                       </div>
                     </div>
                   ) : (
                     // Real generated image
                     <img
-                      src={`data:image/png;base64,${image.imageBytes}`}
+                      src={image.fullImageUrl || `data:image/png;base64,${image.imageBytes}`}
                       alt={`Generated advertisement ${index + 1}`}
                       className="w-full h-64 object-cover rounded-lg"
+                      onError={(e) => {
+                        console.error('Image failed to load:', e);
+                        setError('Failed to display generated image. The image data may be corrupted.');
+                      }}
+                      onLoad={() => console.log('Image loaded successfully')}
                     />
                   )}
                   
@@ -295,11 +286,16 @@ export default function ImageGenerationPage() {
                 <div className="mt-4 space-y-2">
                   <div className="flex justify-between text-sm text-gray-600">
                     <span>Image {index + 1}</span>
-                    <span>{aspectRatio}</span>
+                    <span>Cloudflare AI</span>
                   </div>
-                  {image.isMock && (
+                  {image.isPlaceholder && (
                     <div className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
-                      {image.aiEnhanced ? 'AI-Enhanced Demo Mode' : 'Demo Mode - Connect to Imagen API for real generation'}
+                      ⚠️ Placeholder Image - Cloudflare Worker needs configuration
+                    </div>
+                  )}
+                  {image.isMock && !image.isPlaceholder && (
+                    <div className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
+                      {image.aiEnhanced ? 'AI-Enhanced Demo Mode' : 'Demo Mode - Connect to Cloudflare API for real generation'}
                     </div>
                   )}
                   {image.aiEnhanced && (

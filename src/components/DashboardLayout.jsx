@@ -15,16 +15,14 @@ const DashboardLayout = ({ children }) => {
 
   const menuItems = [
     { name: 'Dashboard', href: '/dashboard', icon: '📊' },
+    { name: 'QR Shopping', href: '/admin/scan-shopping', icon: '📱' },
+    { name: 'Add Customer', href: '/admin/add-customer', icon: '➕' },
+    { name: 'Debug QR', href: '/admin/debug-qr', icon: '🔍' },
     { name: 'Products', href: '/admin/products', icon: '📦' },
+    { name: 'Customer Management', href: '/admin/customers', icon: '👥' },
     { name: 'Analytics', href: '/admin/analytics', icon: '📈' },
-    { name: 'Customers', href: '/admin/customers', icon: '👥' },
-    { name: 'Theft Detection', href: '/admin/theft-detection', icon: '🛡️' },
-    { name: 'Notifications', href: '/admin/notifications', icon: '🔔' },
-    { name: 'Services', href: '/admin/services', icon: '⚙️' },
-    { name: 'Features', href: '/admin/features', icon: '✨' },
-    { name: 'Functionalities', href: '/admin/functionalities', icon: '🔧' },
-    { name: 'Stack', href: '/admin/stack', icon: '🏗️' },
-    { name: 'Home', href: '/admin/home', icon: '🏠' }
+    { name: 'Generate Ad Images', href: '/admin/image-generation', icon: '🎨' },
+    { name: 'Notifications', href: '/admin/notifications', icon: '🔔' }
   ];
 
   return (

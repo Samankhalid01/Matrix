@@ -5,14 +5,15 @@ const DashboardLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const menuItems = [
-    { title: 'Dashboard', icon: '📊', path: '/admin' },
+    { title: 'Dashboard', icon: '📊', path: '/dashboard' },
+    { title: 'QR Shopping', icon: '📱', path: '/admin/scan-shopping' },
+    { title: 'Debug QR', icon: '🔍', path: '/admin/debug-qr' },
     { title: 'Products', icon: '📦', path: '/admin/products' },
     { title: 'Customer Management', icon: '👥', path: '/admin/customers' },
-    { title: 'Analytics', icon: '📈', path: '/admin/analytics' },
+    { title: 'Analytics Dashboard', icon: '📈', path: '/admin/analytics-dashboard' },
+    { title: 'Promotions & Discounts', icon: '�️', path: '/admin/promotions' },
+    { title: 'Notifications Center', icon: '🔔', path: '/admin/notifications-center' },
     { title: 'Generate Ad Images', icon: '🎨', path: '/admin/image-generation' },
-    { title: 'Surveillance Monitor', icon: '🛡️', path: '/admin/surveillance-monitoring' },
-    { title: 'Theft Detection', icon: '🎥', path: '/admin/theft-detection' },
-    { title: 'Notifications', icon: '🔔', path: '/admin/notifications' },
   ];
 
   return (
@@ -25,10 +26,10 @@ const DashboardLayout = ({ children }) => {
       >
         <div className="h-full px-4 py-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold">Admin Panel</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Admin Panel</h2>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden"
+              className="lg:hidden text-gray-700"
             >
               ✕
             </button>

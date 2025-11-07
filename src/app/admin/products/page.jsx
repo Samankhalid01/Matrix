@@ -9,14 +9,17 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('checking');
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [selectedProductQR, setSelectedProductQR] = useState(null);
   
   const [formData, setFormData] = useState({
     product_name: '',
     description: '',
-    category_id: '',
+    catergory: '', // matches your schema's spelling
     price: '',
     quantity: '',
-    weight: '',
+    weight: '', // required in schema
+    tags: '',
     images: []
   });
 
@@ -25,7 +28,7 @@ export default function ProductsPage() {
     fetchProducts();
   }, []);
 
-  // Check MongoDB connection
+  // Check Supabase connection
   const checkConnection = async () => {
     try {
       const response = await fetch('/api/products');
@@ -129,17 +132,25 @@ export default function ProductsPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validate required fields
+    // Validate required fields according to Supabase schema
     if (!formData.product_name?.trim()) {
       alert('Product name is required');
       return;
     }
-    if (!formData.category_id?.trim()) {
+    if (!formData.catergory?.trim()) {
       alert('Category is required');
       return;
     }
     if (!formData.price || parseFloat(formData.price) <= 0) {
       alert('Valid price is required');
+      return;
+    }
+    if (!formData.weight || parseFloat(formData.weight) <= 0) {
+      alert('Weight is required');
+      return;
+    }
+    if (!formData.images || formData.images.length === 0) {
+      alert('At least one product image is required');
       return;
     }
     
@@ -148,13 +159,22 @@ export default function ProductsPage() {
     try {
       const url = '/api/products';
       const method = showEditForm ? 'PUT' : 'POST';
-      const submitData = showEditForm ? { ...formData, product_id: editingProduct.product_id } : formData;
+      
+      // Prepare data to match Supabase schema exactly
+      const submitData = {
+        product_name: formData.product_name.trim(),
+        description: formData.description?.trim() || null,
+        catergory: formData.catergory.trim(), // note the typo matches your schema
+        price: parseInt(formData.price), // bigint in schema
+        quantity: parseInt(formData.quantity) || 0, // bigint in schema
+        weight: parseInt(formData.weight), // bigint, required in schema
+        tags: formData.tags?.trim() || null,
+        images: formData.images.map(img => typeof img === 'string' ? img : img.url), // array of strings
+        in_stock: (parseInt(formData.quantity) || 0) > 0
+      };
 
-      // Ensure numeric fields are properly formatted
-      submitData.price = parseFloat(formData.price);
-      submitData.quantity = parseInt(formData.quantity) || 0;
-      if (formData.weight) {
-        submitData.weight = parseFloat(formData.weight);
+      if (showEditForm) {
+        submitData.id = editingProduct.id;
       }
 
       const response = await fetch(url, {
@@ -187,10 +207,11 @@ export default function ProductsPage() {
     setFormData({
       product_name: product.product_name,
       description: product.description || '',
-      category_id: product.category_id,
+      catergory: product.catergory || '',
       price: product.price.toString(),
       quantity: product.quantity.toString(),
       weight: product.weight ? product.weight.toString() : '',
+      tags: product.tags || '',
       images: product.images || []
     });
     setShowEditForm(true);
@@ -223,6 +244,35 @@ export default function ProductsPage() {
     }
   };
 
+  const handleShowQR = async (product) => {
+    try {
+      const response = await fetch(`/api/qrcode/product?productId=${product.id}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setSelectedProductQR({
+          ...product,
+          qrCodeImage: data.qrCode
+        });
+        setShowQRModal(true);
+      } else {
+        alert('Failed to generate QR code');
+      }
+    } catch (error) {
+      console.error('QR generation error:', error);
+      alert('Failed to generate QR code');
+    }
+  };
+
+  const handleDownloadQR = () => {
+    if (!selectedProductQR?.qrCodeImage) return;
+
+    const link = document.createElement('a');
+    link.href = selectedProductQR.qrCodeImage;
+    link.download = `${selectedProductQR.product_name}_QR.png`;
+    link.click();
+  };
+
   const downloadQRCode = async (product) => {
     try {
       if (product.qr_code) {
@@ -251,10 +301,11 @@ export default function ProductsPage() {
     setFormData({
       product_name: '',
       description: '',
-      category_id: '',
+      catergory: '',
       price: '',
       quantity: '',
       weight: '',
+      tags: '',
       images: []
     });
     setShowAddForm(false);
@@ -283,7 +334,7 @@ export default function ProductsPage() {
                 connectionStatus === 'error' ? 'bg-red-500' : 'bg-yellow-500'
               }`}></div>
               <span className="text-sm text-gray-600">
-                {connectionStatus === 'connected' ? 'MongoDB Connected' : 
+                {connectionStatus === 'connected' ? 'Supabase Connected' : 
                  connectionStatus === 'error' ? 'Connection Error' : 'Checking...'}
               </span>
             </div>
@@ -300,9 +351,25 @@ export default function ProductsPage() {
 
       {/* Loading State */}
       {loading && !showAddForm && !showEditForm ? (
-        <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-          <p className="text-gray-600 mt-4">Loading products...</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+            <div key={i} className="bg-white rounded-lg shadow-sm border animate-pulse">
+              <div className="aspect-square bg-gray-300 rounded-t-lg"></div>
+              <div className="p-4">
+                <div className="h-6 bg-gray-300 rounded w-3/4 mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-1/2 mb-3"></div>
+                <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
+                <div className="h-4 bg-gray-200 rounded w-2/3 mb-3"></div>
+                <div className="flex justify-between items-center pt-3 border-t">
+                  <div className="h-6 bg-gray-300 rounded w-20"></div>
+                  <div className="flex gap-2">
+                    <div className="h-8 w-8 bg-gray-200 rounded"></div>
+                    <div className="h-8 w-8 bg-gray-200 rounded"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         <>
@@ -350,7 +417,7 @@ export default function ProductsPage() {
                         Edit
                       </button>
                       <button 
-                        onClick={() => downloadQRCode(product)}
+                        onClick={() => handleShowQR(product)}
                         className="flex-1 bg-green-600 text-white py-2 px-3 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
                       >
                         QR
@@ -436,12 +503,12 @@ export default function ProductsPage() {
                   </label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="1"
                     name="price"
                     value={formData.price}
                     onChange={handleInputChange}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="0.00"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                    placeholder="0"
                     required
                   />
                 </div>
@@ -455,7 +522,7 @@ export default function ProductsPage() {
                     name="quantity"
                     value={formData.quantity}
                     onChange={handleInputChange}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
                     placeholder="0"
                     required
                   />
@@ -463,32 +530,47 @@ export default function ProductsPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Weight (kg)
+                    Weight * (grams)
                   </label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="1"
                     name="weight"
                     value={formData.weight}
                     onChange={handleInputChange}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="0.00"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                    placeholder="0"
+                    required
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Category ID *
+                  Category *
                 </label>
                 <input
                   type="text"
-                  name="category_id"
-                  value={formData.category_id}
+                  name="catergory"
+                  value={formData.catergory}
                   onChange={handleInputChange}
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="e.g., electronics, food, clothing"
                   required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tags
+                </label>
+                <input
+                  type="text"
+                  name="tags"
+                  value={formData.tags}
+                  onChange={handleInputChange}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., summer, sale, new arrival (comma separated)"
                 />
               </div>
 
@@ -550,6 +632,53 @@ export default function ProductsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* QR Code Modal */}
+      {showQRModal && selectedProductQR && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">
+                  Product QR Code
+                </h2>
+                <p className="text-gray-600 mt-1">
+                  {selectedProductQR.product_name}
+                </p>
+                <p className="text-sm text-gray-500">
+                  ID: {selectedProductQR.id}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowQRModal(false);
+                  setSelectedProductQR(null);
+                }}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-center">
+              <img
+                src={selectedProductQR.qrCodeImage}
+                alt="Product QR Code"
+                className="mx-auto border-4 border-gray-200 rounded-lg"
+              />
+              <button
+                onClick={handleDownloadQR}
+                className="mt-4 w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition"
+              >
+                Download QR Code
+              </button>
+              <p className="text-sm text-gray-600 mt-3">
+                Print this QR code and attach it to the product
+              </p>
+            </div>
           </div>
         </div>
       )}

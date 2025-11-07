@@ -1,151 +1,303 @@
 import { NextResponse } from 'next/server';
-import connectDB from '@/lib/mongodb';
-import Product from '@/models/Product';
-import { generateQRCodeDataURL } from '@/lib/qrcode';
+import { supabase } from '@/lib/supabase';
+import { v2 as cloudinary } from 'cloudinary';
 
-// GET - Fetch all products
-export async function GET() {
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// Helper function to generate embedding
+async function generateEmbedding(productData) {
   try {
-    await connectDB();
+    const embeddingsServiceUrl = process.env.PYTHON_EMBEDDINGS_SERVICE_URL || 'http://localhost:8000';
     
-    const products = await Product.find({})
-      .sort({ created_at: -1 })
-      .lean();
-    
+    const response = await fetch(`${embeddingsServiceUrl}/embed/product`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        product_name: productData.product_name,
+        description: productData.description || '',
+        category: productData.category || '',
+        tags: productData.tags || ''
+      })
+    });
+
+    if (!response.ok) {
+      console.warn('Embedding service not available, skipping embeddings');
+      return null;
+    }
+
+    const data = await response.json();
+    return data.embedding;
+  } catch (error) {
+    console.warn('Failed to generate embedding:', error.message);
+    return null;
+  }
+}
+
+// GET - Fetch all products or search
+export async function GET(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get('search');
+    const category = searchParams.get('category');
+    const inStock = searchParams.get('inStock');
+
+    let query = supabase
+      .from('Product')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    // Search by name or description
+    if (search) {
+      query = query.or(`product_name.ilike.%${search}%,description.ilike.%${search}%`);
+    }
+
+    // Filter by category
+    if (category) {
+      query = query.eq('catergory', category);
+    }
+
+    // Filter by stock status
+    if (inStock !== null && inStock !== undefined) {
+      query = query.eq('in_stock', inStock === 'true');
+    }
+
+    const { data: products, error } = await query;
+
+    if (error) {
+      console.error('Supabase error:', error);
+      return NextResponse.json(
+        { success: false, error: 'Failed to fetch products' },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       data: products,
       count: products.length
     });
+
   } catch (error) {
-    console.error('Get products error:', error);
+    console.error('GET products error:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to fetch products', error: error.message },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
-// POST - Create new product
-export async function POST(req) {
+// POST - Create new product with Cloudinary image upload
+export async function POST(request) {
   try {
-    await connectDB();
-    
-    const body = await req.json();
-    const { product_name, description, category_id, price, quantity, weight, images } = body;
+    const body = await request.json();
+    const { 
+      product_name, 
+      description, 
+      catergory, // Note: using 'catergory' to match your schema typo
+      price, 
+      quantity, 
+      weight,
+      tags,
+      images, // Array of base64 or URLs
+      qrcode 
+    } = body;
 
     // Validate required fields
-    if (!product_name || !category_id || !price) {
+    if (!product_name || !price || !weight) {
       return NextResponse.json(
-        { success: false, message: 'Product name, category, and price are required' },
+        { success: false, error: 'Product name, price, and weight are required' },
         { status: 400 }
       );
     }
 
-    // Get the next product ID
-// Get the highest product_id and increment by 1
-const lastProduct = await Product.findOne().sort({ product_id: -1 });
-let product_id = 1;
+    // Upload images to Cloudinary
+    let uploadedImageUrls = [];
+    if (images && images.length > 0) {
+      console.log(`📤 Uploading ${images.length} images to Cloudinary...`);
+      
+      for (const image of images) {
+        try {
+          // Check if image is an object with dataUrl or if it's a string
+          const imageData = typeof image === 'string' ? image : image.dataUrl || image.data;
+          
+          if (!imageData) {
+            console.error('Invalid image format:', typeof image);
+            continue;
+          }
 
-if (lastProduct) {
-  product_id = lastProduct.product_id + 1;
-} else {
-  // If no products exist, start from 1
-  const productCount = await Product.countDocuments();
-  product_id = productCount + 1;
-}
-
-// Double-check for uniqueness (in case of race conditions)
-const existingProduct = await Product.findOne({ product_id });
-if (existingProduct) {
-  // Find the next available ID
-  const allIds = await Product.find({}, { product_id: 1 }).sort({ product_id: 1 });
-  const usedIds = allIds.map(p => p.product_id);
-  
-  for (let i = 1; i <= usedIds.length + 1; i++) {
-    if (!usedIds.includes(i)) {
-      product_id = i;
-      break;
+          const result = await cloudinary.uploader.upload(imageData, {
+            folder: 'matrix-products',
+            resource_type: 'auto'
+          });
+          uploadedImageUrls.push(result.secure_url);
+          console.log(`✅ Image uploaded: ${result.secure_url}`);
+        } catch (uploadError) {
+          console.error('Image upload error:', uploadError);
+        }
+      }
     }
-  }
-}
 
-console.log('Assigning product_id:', product_id);
-
-    // Generate QR code data URL
-    const productInfo = {
-      id: product_id,
-      name: product_name,
-      price: price
-    };
-    const qrCode = await generateQRCodeDataURL(JSON.stringify(productInfo));
-
-    // Create new product
-    const newProduct = new Product({
-      product_id: product_id,
+    // Generate embedding
+    console.log('🔄 Generating product embedding...');
+    const embedding = await generateEmbedding({
       product_name,
       description,
-      category_id,
-      qr_code: qrCode,
-      price: parseFloat(price),
-      quantity: parseInt(quantity) || 0,
-      weight: parseFloat(weight) || 0,
-      images: images || [],
-      in_stock: parseInt(quantity) > 0
+      category: catergory,
+      tags
     });
 
-    const savedProduct = await newProduct.save();
+    if (embedding) {
+      console.log('✅ Embedding generated successfully');
+    } else {
+      console.log('⚠️ Embedding not generated (service may be offline)');
+    }
+
+    // Insert product into Supabase
+    const { data: product, error } = await supabase
+      .from('Product')
+      .insert([
+        {
+          product_name: product_name.trim(),
+          description: description?.trim(),
+          catergory: catergory?.trim(),
+          price: parseInt(price),
+          quantity: parseInt(quantity || 0),
+          weight: parseInt(weight),
+          images: uploadedImageUrls,
+          tags: tags?.trim(),
+          qrcode: qrcode,
+          in_stock: (quantity || 0) > 0,
+          embedding: embedding
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase error:', error);
+      return NextResponse.json(
+        { success: false, error: 'Failed to create product' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Product created successfully',
-      data: savedProduct
-    });
+      data: product,
+      embedding_generated: !!embedding
+    }, { status: 201 });
 
   } catch (error) {
-    console.error('Create product error:', error);
-    
-    // Handle duplicate key error
-    if (error.code === 11000) {
-      return NextResponse.json(
-        { success: false, message: 'Product with this ID already exists' },
-        { status: 409 }
-      );
-    }
-
+    console.error('POST product error:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to create product', error: error.message },
+      { success: false, error: 'Internal server error: ' + error.message },
       { status: 500 }
     );
   }
 }
 
 // PUT - Update product
-export async function PUT(req) {
+export async function PUT(request) {
   try {
-    await connectDB();
-    
-    const body = await req.json();
-    const { product_id, ...updateData } = body;
+    const body = await request.json();
+    const { 
+      id,
+      product_name, 
+      description, 
+      catergory,
+      price, 
+      quantity, 
+      weight,
+      tags,
+      images,
+      qrcode 
+    } = body;
 
-    if (!product_id) {
+    if (!id) {
       return NextResponse.json(
-        { success: false, message: 'Product ID is required' },
+        { success: false, error: 'Product ID is required' },
         { status: 400 }
       );
     }
 
-    updateData.updated_at = new Date();
+    // Prepare update data
+    const updateData = {};
+    if (product_name) updateData.product_name = product_name.trim();
+    if (description) updateData.description = description.trim();
+    if (catergory) updateData.catergory = catergory.trim();
+    if (price) updateData.price = parseInt(price);
+    if (weight) updateData.weight = parseInt(weight);
+    if (tags) updateData.tags = tags.trim();
+    if (qrcode) updateData.qrcode = qrcode;
     
-    const updatedProduct = await Product.findOneAndUpdate(
-      { product_id },
-      updateData,
-      { new: true, runValidators: true }
-    );
+    if (quantity !== undefined) {
+      updateData.quantity = parseInt(quantity);
+      updateData.in_stock = parseInt(quantity) > 0;
+    }
 
-    if (!updatedProduct) {
+    // Handle image uploads if new images provided
+    if (images && images.length > 0) {
+      let uploadedImageUrls = [];
+      for (const image of images) {
+        if (image.startsWith('http')) {
+          // Already a URL, keep it
+          uploadedImageUrls.push(image);
+        } else {
+          // Upload new image
+          try {
+            const result = await cloudinary.uploader.upload(image, {
+              folder: 'matrix-products',
+              resource_type: 'auto'
+            });
+            uploadedImageUrls.push(result.secure_url);
+          } catch (uploadError) {
+            console.error('Image upload error:', uploadError);
+          }
+        }
+      }
+      updateData.images = uploadedImageUrls;
+    }
+
+    // Regenerate embedding if content changed
+    if (product_name || description || catergory || tags) {
+      console.log('🔄 Regenerating product embedding...');
+      const embedding = await generateEmbedding({
+        product_name: product_name || body.product_name,
+        description: description || body.description,
+        category: catergory || body.catergory,
+        tags: tags || body.tags
+      });
+      if (embedding) {
+        updateData.embedding = embedding;
+        console.log('✅ Embedding regenerated');
+      }
+    }
+
+    // Update product in Supabase
+    const { data: product, error } = await supabase
+      .from('Product')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase error:', error);
       return NextResponse.json(
-        { success: false, message: 'Product not found' },
+        { success: false, error: 'Failed to update product' },
+        { status: 500 }
+      );
+    }
+
+    if (!product) {
+      return NextResponse.json(
+        { success: false, error: 'Product not found' },
         { status: 404 }
       );
     }
@@ -153,78 +305,76 @@ export async function PUT(req) {
     return NextResponse.json({
       success: true,
       message: 'Product updated successfully',
-      data: updatedProduct
+      data: product
     });
 
   } catch (error) {
-    console.error('Update product error:', error);
+    console.error('PUT product error:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to update product', error: error.message },
+      { success: false, error: 'Internal server error: ' + error.message },
       { status: 500 }
     );
   }
 }
 
 // DELETE - Delete product
-export async function DELETE(req) {
+export async function DELETE(request) {
   try {
-    await connectDB();
-    
-    // Get request body
-    const body = await req.json();
-    const product_id = body.product_id;
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
 
-    console.log('Delete request received for product_id:', product_id);
-
-    if (!product_id) {
+    if (!id) {
       return NextResponse.json(
-        { success: false, message: 'Product ID is required' },
+        { success: false, error: 'Product ID is required' },
         { status: 400 }
       );
     }
 
-    // First, find the product to get image public IDs
-    const productToDelete = await Product.findOne({ product_id: parseInt(product_id) });
+    // Get product to delete images from Cloudinary
+    const { data: product } = await supabase
+      .from('Product')
+      .select('images')
+      .eq('id', id)
+      .single();
 
-    if (!productToDelete) {
-      return NextResponse.json(
-        { success: false, message: 'Product not found' },
-        { status: 404 }
-      );
-    }
-
-    console.log('Found product to delete:', productToDelete.product_name);
-
-    // Delete images from Cloudinary if they exist
-    if (productToDelete.images && productToDelete.images.length > 0) {
-      const { deleteFromCloudinary } = await import('../../../lib/cloudinary');
-      
-      for (const image of productToDelete.images) {
-        if (image.publicId) {
-          try {
-            await deleteFromCloudinary(image.publicId);
-            console.log(`Deleted image from Cloudinary: ${image.publicId}`);
-          } catch (cloudinaryError) {
-            console.warn(`Failed to delete image from Cloudinary: ${image.publicId}`, cloudinaryError);
-            // Continue with product deletion even if image deletion fails
+    // Delete images from Cloudinary
+    if (product?.images && product.images.length > 0) {
+      for (const imageUrl of product.images) {
+        try {
+          // Extract public_id from Cloudinary URL
+          const matches = imageUrl.match(/\/matrix-products\/(.+)\./);
+          if (matches && matches[1]) {
+            await cloudinary.uploader.destroy(`matrix-products/${matches[1]}`);
           }
+        } catch (deleteError) {
+          console.error('Failed to delete image from Cloudinary:', deleteError);
         }
       }
     }
 
-    // Now delete the product from database
-    const deletedProduct = await Product.findOneAndDelete({ product_id: parseInt(product_id) });
+    // Delete product from Supabase
+    const { error } = await supabase
+      .from('Product')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Supabase error:', error);
+      return NextResponse.json(
+        { success: false, error: 'Failed to delete product' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      message: 'Product and associated images deleted successfully',
-      data: deletedProduct
+      message: 'Product deleted successfully'
     });
 
   } catch (error) {
-    console.error('Delete product error:', error);
+    console.error('DELETE product error:', error);
     return NextResponse.json(
-      { success: false, message: 'Failed to delete product', error: error.message },
+      { success: false, error: 'Internal server error: ' + error.message },
       { status: 500 }
     );
   }

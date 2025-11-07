@@ -126,7 +126,9 @@ export default function SurveillanceTheftDetection() {
   const triggerVideoScan = async () => {
     try {
       const response = await fetch('http://localhost:5000/surveillance/scan', {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true })
       });
       
       if (response.ok) {
@@ -171,17 +173,18 @@ export default function SurveillanceTheftDetection() {
     const matchesSearch = incident.video_file?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
     if (filterStatus === 'all') return matchesSearch;
     if (filterStatus === 'flagged') return incident.flagged && matchesSearch;
+    if (filterStatus === 'normal') return !incident.flagged && incident.status === 'normal' && matchesSearch;
     if (filterStatus === 'pending') return incident.status === 'pending_review' && matchesSearch;
     if (filterStatus === 'reviewed') return incident.admin_reviewed && matchesSearch;
     return incident.status === filterStatus && matchesSearch;
   });
 
-  // Get risk level color
+  // Get risk level color - Updated for new risk levels
   const getRiskColor = (level) => {
     switch (level) {
       case 'High': return 'text-red-600 bg-red-100';
-      case 'Medium': return 'text-yellow-600 bg-yellow-100';
-      case 'Low': return 'text-green-600 bg-green-100';
+      case 'Medium': return 'text-orange-600 bg-orange-100';
+      case 'Normal': return 'text-green-600 bg-green-100';
       default: return 'text-gray-600 bg-gray-100';
     }
   };
@@ -332,9 +335,16 @@ export default function SurveillanceTheftDetection() {
                 <h3 className="font-semibold text-red-800">🚨 Active Security Alerts</h3>
                 <div className="mt-2 space-y-1">
                   {notifications.slice(0, 3).map(notification => (
-                    <p key={notification.id || notification.notification_id} className="text-sm text-red-700">
-                      • {notification.message} ({notification.risk_level} Risk)
-                    </p>
+                    <div key={notification.id || notification.notification_id} className="flex items-center justify-between">
+                      <p className="text-sm text-red-700">
+                        • {notification.message} ({notification.risk_level} Risk)
+                      </p>
+                      {notification.priority === 'high' && (
+                        <span className="bg-red-600 text-white text-xs px-2 py-1 rounded-full">
+                          URGENT
+                        </span>
+                      )}
+                    </div>
                   ))}
                   {notifications.length > 3 && (
                     <p className="text-sm text-red-600 font-medium">
@@ -364,7 +374,7 @@ export default function SurveillanceTheftDetection() {
             </div>
             
             <div className="flex gap-2">
-              {['all', 'flagged', 'pending', 'reviewed'].map((status) => (
+              {['all', 'flagged', 'normal', 'pending', 'reviewed'].map((status) => (
                 <button
                   key={status}
                   onClick={() => setFilterStatus(status)}
@@ -400,14 +410,31 @@ export default function SurveillanceTheftDetection() {
                     <div className="flex items-center gap-2">
                       <Video className="w-5 h-5 text-blue-600" />
                       <span className="font-medium text-gray-900 text-sm truncate">{incident.video_file}</span>
+                      {incident.source === 'upload' && (
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                          UPLOAD
+                        </span>
+                      )}
                     </div>
                     
-                    {incident.flagged && (
-                      <div className="flex items-center gap-1 bg-red-100 px-2 py-1 rounded-full">
-                        <AlertTriangle className="w-3 h-3 text-red-500" />
-                        <span className="text-xs font-medium text-red-600">FLAGGED</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {incident.flagged ? (
+                        <div className="flex items-center gap-1 bg-red-100 px-2 py-1 rounded-full">
+                          <AlertTriangle className="w-3 h-3 text-red-500" />
+                          <span className="text-xs font-medium text-red-600">FLAGGED</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 bg-green-100 px-2 py-1 rounded-full">
+                          <CheckCircle className="w-3 h-3 text-green-500" />
+                          <span className="text-xs font-medium text-green-600">NORMAL</span>
+                        </div>
+                      )}
+                      {incident.risk_level === 'Normal' && (
+                        <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                          NO REVIEW NEEDED
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Risk Level */}
@@ -461,10 +488,11 @@ export default function SurveillanceTheftDetection() {
                       className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
                     >
                       <Eye className="w-4 h-4" />
-                      Review
+                      {incident.risk_level === 'Normal' ? 'View' : 'Review'}
                     </button>
                     
-                    {incident.status === 'pending_review' && (
+                    {/* Only show review buttons for flagged videos */}
+                    {incident.flagged && incident.status === 'pending_review' && (
                       <>
                         <button
                           onClick={() => handleReview(incident.incident_id, 'confirmed_theft')}
@@ -479,6 +507,14 @@ export default function SurveillanceTheftDetection() {
                           Dismiss
                         </button>
                       </>
+                    )}
+                    
+                    {/* Show "No Action Needed" for normal videos */}
+                    {incident.risk_level === 'Normal' && (
+                      <span className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm flex items-center gap-1">
+                        <CheckCircle className="w-4 h-4" />
+                        No Action Needed
+                      </span>
                     )}
                   </div>
                 </div>
