@@ -14,6 +14,7 @@ export default function DemandPredictionPage() {
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [reportLimit, setReportLimit] = useState(10);
+  const [forecastPeriod, setForecastPeriod] = useState('monthly'); // daily, weekly, monthly
 
   useEffect(() => {
     loadData();
@@ -22,11 +23,11 @@ export default function DemandPredictionPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Load forecasts
-      const forecastRes = await fetch('/api/analytics/demand-forecast');
+      // Load ML-powered forecasts for all products with period type
+      const forecastRes = await fetch(`/api/analytics/demand-forecast?generate_all=true&period=${forecastPeriod}`);
       const forecastData = await forecastRes.json();
       if (forecastData.success) {
-        setForecasts(forecastData.forecasts);
+        setForecasts(forecastData.forecasts || []);
       }
 
       // Load performance data
@@ -34,9 +35,22 @@ export default function DemandPredictionPage() {
       const perfData = await perfRes.json();
       if (perfData.success) {
         setPerformanceData(perfData);
+      } else {
+        // Set default empty performance data
+        setPerformanceData({
+          summary: { totalRevenue: 0, totalUnitsSold: 0, totalProducts: 0, lowStockCount: 0 },
+          topSelling: [],
+          underperforming: []
+        });
       }
     } catch (error) {
       console.error('Error loading data:', error);
+      // Set default data on error
+      setPerformanceData({
+        summary: { totalRevenue: 0, totalUnitsSold: 0, totalProducts: 0, lowStockCount: 0 },
+        topSelling: [],
+        underperforming: []
+      });
     } finally {
       setLoading(false);
     }
@@ -61,13 +75,23 @@ export default function DemandPredictionPage() {
       });
 
       if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${reportType}-${format}-${Date.now()}.${format}`;
-        a.click();
-        window.URL.revokeObjectURL(url);
+        if (format === 'pdf') {
+          // For PDF, open in new tab (it's HTML that can be printed as PDF)
+          const html = await response.text();
+          const newWindow = window.open('', '_blank');
+          newWindow.document.write(html);
+          newWindow.document.close();
+        } else {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${reportType}-report-${Date.now()}.${format === 'json' ? 'json' : 'csv'}`;
+          a.click();
+          window.URL.revokeObjectURL(url);
+        }
+      } else {
+        alert('Failed to export report. Please try again.');
       }
     } catch (error) {
       console.error('Export error:', error);
@@ -192,7 +216,7 @@ export default function DemandPredictionPage() {
             <Filter className="w-5 h-5 text-gray-600" />
             <h3 className="text-lg font-semibold text-gray-900">Filters & Parameters</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
               <input
@@ -210,6 +234,18 @@ export default function DemandPredictionPage() {
                 onChange={(e) => setEndDate(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Forecast Period</label>
+              <select
+                value={forecastPeriod}
+                onChange={(e) => setForecastPeriod(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="daily" className="text-gray-900 bg-white">Daily (Next 7 Days)</option>
+                <option value="weekly" className="text-gray-900 bg-white">Weekly (Next 4 Weeks)</option>
+                <option value="monthly" className="text-gray-900 bg-white">Monthly (Next 3 Months)</option>
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
@@ -254,7 +290,7 @@ export default function DemandPredictionPage() {
         {activeTab === 'forecast' && (
           <div>
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-6 text-white">
                 <p className="text-sm opacity-90">Total Forecasts</p>
                 <p className="text-3xl font-bold">{forecasts.length}</p>
@@ -262,15 +298,30 @@ export default function DemandPredictionPage() {
               <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-6 text-white">
                 <p className="text-sm opacity-90">Total Predicted Demand</p>
                 <p className="text-3xl font-bold">
-                  {forecasts.reduce((sum, f) => sum + f.predicted_demand, 0).toLocaleString()}
+                  {forecasts.reduce((sum, f) => sum + (f.predicted_demand || 0), 0).toLocaleString()}
+                </p>
+              </div>
+              <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-6 text-white">
+                <p className="text-sm opacity-90">Avg Confidence</p>
+                <p className="text-3xl font-bold">
+                  {forecasts.length > 0 
+                    ? ((forecasts.reduce((sum, f) => sum + (f.confidence_level || 0.75), 0) / forecasts.length) * 100).toFixed(0) 
+                    : 0}%
+                </p>
+              </div>
+              <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg p-6 text-white">
+                <p className="text-sm opacity-90">Products Analyzed</p>
+                <p className="text-3xl font-bold">
+                  {new Set(forecasts.map(f => f.product_id)).size}
                 </p>
               </div>
             </div>
 
             {/* Forecast Table */}
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <div className="p-4 bg-gray-50 border-b">
-                <h2 className="text-xl font-semibold text-gray-900">Demand Forecasts by Product</h2>
+              <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-gray-900">ML-Powered Demand Forecasts</h2>
+                <span className="text-sm text-gray-500">Next 3 Months Predictions</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -278,31 +329,65 @@ export default function DemandPredictionPage() {
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Product</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Category</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Forecast Date</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Month</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Predicted Demand</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Model Version</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Confidence</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">Trend</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {forecasts.slice(0, 20).map((forecast, index) => (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {forecast.Product?.product_name || 'Unknown'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          {forecast.Product?.category || 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          {forecast.forecast_date}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                          {forecast.predicted_demand} units
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-600">
-                          {forecast.model_version}
+                    {forecasts.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                          No forecasts available. Click "Apply Filters" to generate ML predictions.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      forecasts.slice(0, 30).map((forecast, index) => (
+                        <tr key={index} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {forecast.Product?.product_name || 'Unknown'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {forecast.Product?.category || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {forecast.month || forecast.forecast_date}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-semibold text-gray-900">{forecast.predicted_demand} units</div>
+                            {forecast.lower_bound && forecast.upper_bound && (
+                              <div className="text-xs text-gray-500">
+                                Range: {forecast.lower_bound} - {forecast.upper_bound}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs font-semibold rounded ${
+                              (forecast.confidence_level || 0.75) >= 0.8 
+                                ? 'bg-green-100 text-green-800' 
+                                : (forecast.confidence_level || 0.75) >= 0.7 
+                                  ? 'bg-yellow-100 text-yellow-800' 
+                                  : 'bg-red-100 text-red-800'
+                            }`}>
+                              {((forecast.confidence_level || 0.75) * 100).toFixed(0)}%
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <span className={`${
+                              forecast.trend_direction === 'increasing' 
+                                ? 'text-green-600' 
+                                : forecast.trend_direction === 'decreasing' 
+                                  ? 'text-red-600' 
+                                  : 'text-yellow-600'
+                            }`}>
+                              {forecast.trend_direction === 'increasing' ? '↑ Growing' : 
+                               forecast.trend_direction === 'decreasing' ? '↓ Declining' : '→ Stable'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -310,25 +395,25 @@ export default function DemandPredictionPage() {
           </div>
         )}
 
-        {activeTab === 'performance' && performanceData && (
+        {activeTab === 'performance' && (
           <div>
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-blue-500">
                 <p className="text-sm text-gray-600">Total Revenue</p>
-                <p className="text-2xl font-bold text-gray-900">${performanceData.summary.totalRevenue.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-gray-900">${(performanceData?.summary?.totalRevenue || 0).toLocaleString()}</p>
               </div>
               <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-green-500">
                 <p className="text-sm text-gray-600">Units Sold</p>
-                <p className="text-2xl font-bold text-gray-900">{performanceData.summary.totalUnitsSold.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-gray-900">{(performanceData?.summary?.totalUnitsSold || 0).toLocaleString()}</p>
               </div>
               <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-yellow-500">
                 <p className="text-sm text-gray-600">Total Products</p>
-                <p className="text-2xl font-bold text-gray-900">{performanceData.summary.totalProducts}</p>
+                <p className="text-2xl font-bold text-gray-900">{performanceData?.summary?.totalProducts || 0}</p>
               </div>
               <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-red-500">
                 <p className="text-sm text-gray-600">Low Stock Items</p>
-                <p className="text-2xl font-bold text-gray-900">{performanceData.summary.lowStockCount}</p>
+                <p className="text-2xl font-bold text-gray-900">{performanceData?.summary?.lowStockCount || 0}</p>
               </div>
             </div>
 
@@ -350,32 +435,40 @@ export default function DemandPredictionPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {performanceData.topSelling.map((product, index) => (
-                      <tr key={product.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
-                          #{index + 1}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {product.name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          {product.category}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {product.totalSold}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">
-                          ${product.totalRevenue.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs font-semibold rounded ${
-                            product.stockStatus === 'low' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                          }`}>
-                            {product.currentStock} in stock
-                          </span>
+                    {(!performanceData?.topSelling || performanceData.topSelling.length === 0) ? (
+                      <tr>
+                        <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                          No sales data available. Click "Apply Filters" to load performance data.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      performanceData.topSelling.map((product, index) => (
+                        <tr key={product.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                            #{index + 1}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {product.name}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {product.category}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {product.totalSold}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">
+                            ${(product.totalRevenue || 0).toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs font-semibold rounded ${
+                              product.stockStatus === 'low' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                            }`}>
+                              {product.currentStock} in stock
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -399,25 +492,33 @@ export default function DemandPredictionPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {performanceData.underperforming.map((product) => (
-                      <tr key={product.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {product.name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          {product.category}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {product.totalSold}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
-                          ${product.totalRevenue.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          {product.currentStock}
+                    {(!performanceData?.underperforming || performanceData.underperforming.length === 0) ? (
+                      <tr>
+                        <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                          No underperforming products found.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      performanceData.underperforming.map((product) => (
+                        <tr key={product.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {product.name}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {product.category}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {product.totalSold}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
+                            ${(product.totalRevenue || 0).toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {product.currentStock}
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -429,7 +530,7 @@ export default function DemandPredictionPage() {
           <div className="bg-white rounded-lg shadow-sm p-6">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Export Reports</h2>
             <p className="text-gray-600 mb-6">
-              Download reports in various formats (CSV, JSON, Excel)
+              Download reports in various formats (PDF, CSV, JSON)
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -440,6 +541,13 @@ export default function DemandPredictionPage() {
                   Top selling, underperforming products, and category analysis
                 </p>
                 <div className="space-y-2">
+                  <button
+                    onClick={() => exportReport('performance', 'pdf')}
+                    className="w-full px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export as PDF
+                  </button>
                   <button
                     onClick={() => exportReport('performance', 'csv')}
                     className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center justify-center gap-2"
@@ -465,6 +573,13 @@ export default function DemandPredictionPage() {
                 </p>
                 <div className="space-y-2">
                   <button
+                    onClick={() => exportReport('forecast', 'pdf')}
+                    className="w-full px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export as PDF
+                  </button>
+                  <button
                     onClick={() => exportReport('forecast', 'csv')}
                     className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center justify-center gap-2"
                   >
@@ -489,6 +604,13 @@ export default function DemandPredictionPage() {
                 </p>
                 <div className="space-y-2">
                   <button
+                    onClick={() => exportReport('sales', 'pdf')}
+                    className="w-full px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export as PDF
+                  </button>
+                  <button
                     onClick={() => exportReport('sales', 'csv')}
                     className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center justify-center gap-2"
                   >
@@ -510,11 +632,11 @@ export default function DemandPredictionPage() {
             <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h4 className="font-semibold text-gray-900 mb-2">Export Features:</h4>
               <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-                <li>CSV format - Compatible with Excel, Google Sheets</li>
-                <li>JSON format - For programmatic access and APIs</li>
+                <li><strong>PDF format</strong> - Professional printable reports with charts and styling</li>
+                <li><strong>CSV format</strong> - Compatible with Excel, Google Sheets for analysis</li>
+                <li><strong>JSON format</strong> - For programmatic access and APIs</li>
                 <li>Customizable date ranges and filters</li>
-                <li>Category-specific reports</li>
-                <li>Real-time data export</li>
+                <li>Real-time ML-generated forecasts</li>
               </ul>
             </div>
           </div>

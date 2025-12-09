@@ -40,38 +40,36 @@ export default function CustomerCartPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+      <div className="min-h-screen bg-black p-6">
       <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-lg shadow-xl p-8 mb-6">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">My Shopping Cart</h1>
-          <p className="text-gray-600">View your scanned products</p>
-        </div>
+            <div className="bg-gradient-to-br from-[#181028] via-[#232136] to-[#2a1439] rounded-xl shadow-2xl border-2 border-[#A855F7] p-8 mb-6">
+              <h1 className="text-3xl font-bold text-[#A855F7] mb-2 drop-shadow-lg">My Shopping Cart</h1>
+              <p className="text-white">View your scanned products</p>
+            </div>
 
         {/* Customer ID Input */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <label className="block text-gray-700 font-medium mb-2">
-            Enter Your Customer ID
-          </label>
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              placeholder="Customer ID (UUID)"
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-            />
-            <button
-              onClick={loadCart}
-              disabled={loading}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition disabled:bg-gray-400"
-            >
-              {loading ? 'Loading...' : 'Load Cart'}
-            </button>
+          <div className="bg-gradient-to-br from-[#181028] via-[#232136] to-[#2a1439] rounded-xl shadow-xl border-2 border-[#A855F7] p-6 mb-6">
+            <label className="block text-[#A855F7] font-medium mb-2">
+              Enter Your Customer ID
+            </label>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={customerId}
+                onChange={(e) => setCustomerId(e.target.value)}
+                placeholder="Customer ID (UUID)"
+                className="border border-[#A855F7] bg-[#232136] text-white rounded-lg px-4 py-2 w-full focus:outline-none focus:ring-2 focus:ring-[#A855F7]"
+              />
+              <button
+                onClick={loadCart}
+                className="bg-[#A855F7] text-white px-6 py-2 rounded-lg font-semibold hover:bg-[#7B1FA2] transition-all duration-200"
+                disabled={loading}
+              >
+                {loading ? 'Loading...' : 'Load Cart'}
+              </button>
+            </div>
+            {error && <p className="text-red-500 mt-2">{error}</p>}
           </div>
-          {error && (
-            <p className="text-red-600 mt-2 text-sm">{error}</p>
-          )}
-        </div>
 
         {/* Cart Items */}
         <div className="bg-white rounded-lg shadow-lg p-6">

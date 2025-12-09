@@ -37,7 +37,7 @@ export async function GET(request) {
     // Get all products
     const { data: products, error: prodError } = await supabase
       .from('Product')
-      .select('id, product_name, category, price, current_stock, min_stock_threshold');
+      .select('id, product_name, category, price, quantity, min_stock_threshold');
 
     if (prodError) throw prodError;
 
@@ -60,20 +60,22 @@ export async function GET(request) {
     });
 
     // Combine product info with stats
-    const productPerformance = products.map(product => {
+    const productPerformance = (products || []).map(product => {
       const stats = productStats[product.id] || { totalSold: 0, totalRevenue: 0, transactionCount: 0 };
+      const currentStock = product.quantity || 0;
+      const minStock = product.min_stock_threshold || 10;
       return {
         id: product.id,
         name: product.product_name,
-        category: product.category,
-        price: product.price,
-        currentStock: product.current_stock,
-        minStock: product.min_stock_threshold,
+        category: product.category || 'Uncategorized',
+        price: product.price || 0,
+        currentStock: currentStock,
+        minStock: minStock,
         totalSold: stats.totalSold,
         totalRevenue: stats.totalRevenue,
         transactionCount: stats.transactionCount,
         avgRevenuePerTransaction: stats.transactionCount > 0 ? stats.totalRevenue / stats.transactionCount : 0,
-        stockStatus: product.current_stock <= product.min_stock_threshold ? 'low' : 'healthy'
+        stockStatus: currentStock <= minStock ? 'low' : 'healthy'
       };
     });
 

@@ -1,0 +1,17 @@
+{
+  "name": "matrix-scripts",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Utility scripts for MATRIX project",
+  "scripts": {
+    "bulk-add": "node bulk-add-products-direct.js",
+    "delete-all": "node delete-all-products.js",
+    "reset-with-embeddings": "node reset-and-add-with-embeddings.js",
+    "add-with-embeddings": "node bulk-add-with-embeddings.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "node-fetch": "^3.3.2",
+    "qrcode": "^1.5.4"
+  }
+}

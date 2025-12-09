@@ -1,5 +1,23 @@
 ﻿'use client';
 import { useState, useEffect } from 'react';
+import ProductModal from '@/components/admin/ProductModal';
+import DeleteConfirmModal from '@/components/admin/DeleteConfirmModal';
+import { AlertModal, ConfirmModal } from '@/components/Modal';
+import { 
+  FiPackage, 
+  FiPlus, 
+  FiEdit2, 
+  FiTrash2, 
+  FiDownload,
+  FiImage,
+  FiDollarSign,
+  FiBox,
+  FiTag,
+  FiLayers,
+  FiCheckCircle,
+  FiAlertCircle,
+  FiX
+} from 'react-icons/fi';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
@@ -12,6 +30,27 @@ export default function ProductsPage() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [selectedProductQR, setSelectedProductQR] = useState(null);
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const PRODUCTS_PER_PAGE = 12;
+  
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    productId: null,
+    productName: ''
+  });
+  
+  // Modal state
+  const [modal, setModal] = useState({
+    isOpen: false,
+    type: 'success', // 'success' or 'error'
+    message: ''
+  });
+  
   const [formData, setFormData] = useState({
     product_name: '',
     description: '',
@@ -22,6 +61,14 @@ export default function ProductsPage() {
     tags: '',
     images: []
   });
+
+  const showModal = (type, message) => {
+    setModal({ isOpen: true, type, message });
+  };
+
+  const closeModal = () => {
+    setModal({ isOpen: false, type: 'success', message: '' });
+  };
 
   useEffect(() => {
     checkConnection();
@@ -43,25 +90,44 @@ export default function ProductsPage() {
     }
   };
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (page = 1, append = false) => {
     try {
-      setLoading(true);
-      const response = await fetch('/api/products');
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+      
+      const response = await fetch(`/api/products?page=${page}&limit=${PRODUCTS_PER_PAGE}`);
       if (!response.ok) {
         throw new Error('Failed to fetch products');
       }
       
       const result = await response.json();
       if (result.success) {
-        setProducts(result.data || []);
+        if (append) {
+          setProducts(prev => [...prev, ...(result.data || [])]);
+        } else {
+          setProducts(result.data || []);
+        }
+        setTotalProducts(result.total || 0);
+        setHasMore(result.hasMore || false);
+        setCurrentPage(page);
       } else {
         throw new Error(result.message || 'Failed to fetch products');
       }
     } catch (error) {
       console.error('Error fetching products:', error);
-      alert('Failed to load products: ' + error.message);
+      showModal('error', 'Failed to load products: ' + error.message);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  const loadMoreProducts = () => {
+    if (!loadingMore && hasMore) {
+      fetchProducts(currentPage + 1, true);
     }
   };
 
@@ -78,14 +144,14 @@ export default function ProductsPage() {
     if (!files || files.length === 0) return;
 
     if (files.length > 4) {
-      alert('Maximum 4 images allowed');
+      showModal('error', 'Maximum 4 images allowed');
       return;
     }
 
     // Check current images count
     const currentImageCount = formData.images ? formData.images.length : 0;
     if (currentImageCount + files.length > 4) {
-      alert(`You can only upload ${4 - currentImageCount} more image(s)`);
+      showModal('error', `You can only upload ${4 - currentImageCount} more image(s)`);
       return;
     }
 
@@ -115,13 +181,13 @@ export default function ProductsPage() {
           ...prev,
           images: [...(prev.images || []), ...imageObjects]
         }));
-        alert(`${files.length} image(s) uploaded successfully!`);
+        showModal('success', `${files.length} image(s) uploaded successfully!`);
       } else {
         throw new Error(result.message || 'Upload failed');
       }
     } catch (error) {
       console.error('Upload error:', error);
-      alert('Failed to upload images: ' + error.message);
+      showModal('error', 'Failed to upload images: ' + error.message);
     } finally {
       setUploading(false);
       // Clear the file input
@@ -134,23 +200,23 @@ export default function ProductsPage() {
     
     // Validate required fields according to Supabase schema
     if (!formData.product_name?.trim()) {
-      alert('Product name is required');
+      showModal('error', 'Product name is required');
       return;
     }
     if (!formData.catergory?.trim()) {
-      alert('Category is required');
+      showModal('error', 'Category is required');
       return;
     }
     if (!formData.price || parseFloat(formData.price) <= 0) {
-      alert('Valid price is required');
+      showModal('error', 'Valid price is required');
       return;
     }
     if (!formData.weight || parseFloat(formData.weight) <= 0) {
-      alert('Weight is required');
+      showModal('error', 'Weight is required');
       return;
     }
     if (!formData.images || formData.images.length === 0) {
-      alert('At least one product image is required');
+      showModal('error', 'At least one product image is required');
       return;
     }
     
@@ -188,7 +254,7 @@ export default function ProductsPage() {
       const result = await response.json();
       
       if (response.ok && result.success) {
-        alert(showEditForm ? 'Product updated successfully!' : 'Product added successfully!');
+        showModal('success', showEditForm ? 'Product updated successfully!' : 'Product added successfully!');
         resetForm();
         fetchProducts();
       } else {
@@ -196,7 +262,7 @@ export default function ProductsPage() {
       }
     } catch (error) {
       console.error('Submit error:', error);
-      alert('Failed to save product: ' + error.message);
+      showModal('error', 'Failed to save product: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -219,28 +285,50 @@ export default function ProductsPage() {
   };
 
   const handleDelete = async (productId) => {
-    if (!confirm('Are you sure you want to delete this product?')) return;
-
     try {
-      const response = await fetch('/api/products', {
+      // Use query parameter instead of body for DELETE request
+      const response = await fetch(`/api/products?id=${productId}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ product_id: productId }),
       });
 
       const result = await response.json();
       
       if (result.success) {
-        alert('Product deleted successfully!');
+        showModal('success', 'Product deleted successfully!');
         fetchProducts();
       } else {
-        throw new Error(result.message || 'Delete failed');
+        throw new Error(result.error || 'Delete failed');
       }
     } catch (error) {
       console.error('Delete error:', error);
-      alert('Failed to delete product: ' + error.message);
+      showModal('error', 'Failed to delete product: ' + error.message);
+    } finally {
+      // Close delete confirmation modal
+      setDeleteModal({ isOpen: false, productId: null, productName: '' });
+    }
+  };
+
+  // Open delete confirmation modal
+  const openDeleteModal = (product) => {
+    setDeleteModal({
+      isOpen: true,
+      productId: product.id,
+      productName: product.product_name
+    });
+  };
+
+  // Close delete confirmation modal
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, productId: null, productName: '' });
+  };
+
+  // Confirm delete
+  const confirmDelete = () => {
+    if (deleteModal.productId) {
+      handleDelete(deleteModal.productId);
     }
   };
 
@@ -256,11 +344,11 @@ export default function ProductsPage() {
         });
         setShowQRModal(true);
       } else {
-        alert('Failed to generate QR code');
+        showModal('error', 'Failed to generate QR code');
       }
     } catch (error) {
       console.error('QR generation error:', error);
-      alert('Failed to generate QR code');
+      showModal('error', 'Failed to generate QR code');
     }
   };
 
@@ -289,11 +377,11 @@ export default function ProductsPage() {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
       } else {
-        alert('QR code not available for this product');
+        showModal('error', 'QR code not available for this product');
       }
     } catch (error) {
       console.error('QR download error:', error);
-      alert('Failed to download QR code');
+      showModal('error', 'Failed to download QR code');
     }
   };
 
@@ -321,20 +409,23 @@ export default function ProductsPage() {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-6 min-h-screen space-y-8">
       {/* Header with Connection Status */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Product Management</h1>
-          <div className="flex items-center gap-4 mt-2">
-            <p className="text-gray-600">Manage your store inventory and product information</p>
-            <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${
+          <h1 className="text-4xl font-bold text-white drop-shadow-lg flex items-center gap-3">
+            <FiPackage className="text-purple-400" />
+            Product Management
+          </h1>
+          <div className="flex items-center gap-6 mt-3">
+            <p className="text-gray-300">Manage your store inventory and product information</p>
+            <div className="flex items-center gap-2 bg-gray-800/50 px-3 py-1.5 rounded-full border border-purple-500/20">
+              <div className={`w-2 h-2 rounded-full animate-pulse ${
                 connectionStatus === 'connected' ? 'bg-green-500' : 
                 connectionStatus === 'error' ? 'bg-red-500' : 'bg-yellow-500'
               }`}></div>
-              <span className="text-sm text-gray-600">
-                {connectionStatus === 'connected' ? 'Supabase Connected' : 
+              <span className="text-sm text-gray-400">
+                {connectionStatus === 'connected' ? 'Connected' : 
                  connectionStatus === 'error' ? 'Connection Error' : 'Checking...'}
               </span>
             </div>
@@ -343,28 +434,29 @@ export default function ProductsPage() {
         <button
           onClick={() => {setShowAddForm(true); setShowEditForm(false);}}
           disabled={connectionStatus !== 'connected'}
-          className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+          className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-4 rounded-2xl hover:from-purple-700 hover:to-pink-700 transition-all font-bold shadow-lg shadow-purple-500/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 hover:scale-105"
         >
-          + Add New Product
+          <FiPlus className="w-5 h-5" />
+          Add New Product
         </button>
       </div>
 
       {/* Loading State */}
       {loading && !showAddForm && !showEditForm ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-            <div key={i} className="bg-white rounded-lg shadow-sm border animate-pulse">
-              <div className="aspect-square bg-gray-300 rounded-t-lg"></div>
-              <div className="p-4">
-                <div className="h-6 bg-gray-300 rounded w-3/4 mb-2"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/2 mb-3"></div>
-                <div className="h-4 bg-gray-200 rounded w-full mb-2"></div>
-                <div className="h-4 bg-gray-200 rounded w-2/3 mb-3"></div>
-                <div className="flex justify-between items-center pt-3 border-t">
-                  <div className="h-6 bg-gray-300 rounded w-20"></div>
+            <div key={i} className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 backdrop-blur-xl rounded-3xl border border-purple-500/20 animate-pulse">
+              <div className="aspect-square bg-gray-700/30 rounded-t-3xl"></div>
+              <div className="p-5">
+                <div className="h-6 bg-gray-700/50 rounded-xl w-3/4 mb-3"></div>
+                <div className="h-4 bg-gray-700/30 rounded-lg w-1/2 mb-4"></div>
+                <div className="h-4 bg-gray-700/30 rounded-lg w-full mb-2"></div>
+                <div className="h-4 bg-gray-700/30 rounded-lg w-2/3 mb-4"></div>
+                <div className="flex justify-between items-center pt-4 border-t border-purple-500/20">
+                  <div className="h-8 bg-gray-700/50 rounded-xl w-24"></div>
                   <div className="flex gap-2">
-                    <div className="h-8 w-8 bg-gray-200 rounded"></div>
-                    <div className="h-8 w-8 bg-gray-200 rounded"></div>
+                    <div className="h-10 w-10 bg-gray-700/30 rounded-xl"></div>
+                    <div className="h-10 w-10 bg-gray-700/30 rounded-xl"></div>
                   </div>
                 </div>
               </div>
@@ -375,74 +467,120 @@ export default function ProductsPage() {
         <>
           {/* Products Grid */}
           {products.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
-              {products.map((product) => (
-                <div key={product._id} className="bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow">
-                  <div className="aspect-square bg-gray-100 rounded-t-lg overflow-hidden">
-                    {product.images && product.images.length > 0 ? (
-                      <img
-                        src={typeof product.images[0] === 'string' ? product.images[0] : product.images[0].url}
-                        alt={typeof product.images[0] === 'string' ? product.product_name : product.images[0].alt || product.product_name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        <span className="text-4xl">📦</span>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {products.map((product) => (
+                  <div key={product._id} className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 backdrop-blur-xl rounded-3xl border border-purple-500/20 hover:border-purple-500/40 transition-all shadow-2xl group hover:scale-105 duration-300">
+                    <div className="aspect-square bg-gray-700/30 rounded-t-3xl overflow-hidden relative">
+                      {product.images && product.images.length > 0 ? (
+                        <>
+                          <img
+                            src={typeof product.images[0] === 'string' ? product.images[0] : product.images[0].url}
+                            alt={typeof product.images[0] === 'string' ? product.product_name : product.images[0].alt || product.product_name}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                          />
+                          <div className="absolute top-3 right-3">
+                            <div className="bg-purple-500/20 backdrop-blur-md border border-purple-500/30 rounded-full p-2">
+                              <FiImage className="w-4 h-4 text-purple-400" />
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-600">
+                          <FiPackage className="w-20 h-20" />
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="p-5">
+                      <h3 className="font-bold text-white mb-2 truncate text-lg">
+                        {product.product_name}
+                      </h3>
+                      <p className="text-gray-400 text-sm mb-4 line-clamp-2 min-h-[2.5rem]">
+                        {product.description || 'No description available'}
+                      </p>
+                      
+                      <div className="flex items-center justify-between mb-4 pb-4 border-b border-purple-500/20">
+                        <div className="flex items-center gap-2">
+                          <FiDollarSign className="w-5 h-5 text-purple-400" />
+                          <span className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                            ₨{product.price}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-purple-500/10 px-3 py-1.5 rounded-xl border border-purple-500/20">
+                          <FiBox className="w-4 h-4 text-purple-400" />
+                          <span className="text-sm text-gray-300 font-medium">
+                            {product.quantity}
+                          </span>
+                        </div>
                       </div>
+                      
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => handleEdit(product)}
+                          className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-2.5 px-3 rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all text-sm font-semibold flex items-center justify-center gap-1.5 shadow-lg shadow-purple-500/30 hover:scale-105"
+                        >
+                          <FiEdit2 className="w-4 h-4" />
+                          Edit
+                        </button>
+                        <button 
+                          onClick={() => handleShowQR(product)}
+                          className="border border-purple-500/30 text-purple-400 py-2.5 px-3 rounded-xl hover:bg-purple-500/10 transition-all text-sm font-medium flex items-center justify-center gap-1.5 hover:scale-105"
+                        >
+                          <FiDownload className="w-4 h-4" />
+                          QR
+                        </button>
+                        <button 
+                          onClick={() => openDeleteModal(product)}
+                          className="bg-red-600/20 border border-red-500/30 text-red-400 py-2.5 px-3 rounded-xl hover:bg-red-600/30 transition-all text-sm font-medium flex items-center justify-center hover:scale-105"
+                        >
+                          <FiTrash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Load More Button */}
+              {!loading && products.length > 0 && hasMore && (
+                <div className="flex justify-center mt-8">
+                  <button
+                    onClick={loadMoreProducts}
+                    disabled={loadingMore}
+                    className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-4 rounded-2xl hover:from-purple-700 hover:to-pink-700 transition-all font-bold shadow-lg shadow-purple-500/50 flex items-center gap-2 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  >
+                    {loadingMore ? (
+                      <>
+                        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <FiPlus className="w-5 h-5" />
+                        Load More Products ({products.length} of {totalProducts})
+                      </>
                     )}
-                  </div>
-                  
-                  <div className="p-4">
-                    <h3 className="font-semibold text-gray-900 mb-2 truncate">
-                      {product.product_name}
-                    </h3>
-                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-                      {product.description || 'No description available'}
-                    </p>
-                    
-                    <div className="flex justify-between items-center mb-3">
-                      <span className="text-lg font-bold text-green-600">
-                        ₨{product.price}
-                      </span>
-                      <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                        Qty: {product.quantity}
-                      </span>
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => handleEdit(product)}
-                        className="flex-1 bg-blue-600 text-white py-2 px-3 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-                      >
-                        Edit
-                      </button>
-                      <button 
-                        onClick={() => handleShowQR(product)}
-                        className="flex-1 bg-green-600 text-white py-2 px-3 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                      >
-                        QR
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(product.product_id)}
-                        className="bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
+                  </button>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           ) : (
-            <div className="text-center py-12 bg-white rounded-lg border">
-              <div className="text-6xl mb-4">📦</div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No products found</h3>
-              <p className="text-gray-600 mb-6">Get started by adding your first product to the inventory</p>
+            <div className="text-center py-20 bg-gradient-to-br from-gray-800/80 to-gray-900/80 backdrop-blur-xl rounded-3xl border border-purple-500/20">
+              <div className="mb-6">
+                <FiPackage className="w-24 h-24 mx-auto text-purple-400/40 mb-4" />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-3">No products found</h3>
+              <p className="text-gray-400 mb-8 max-w-md mx-auto">Get started by adding your first product to the inventory</p>
               {connectionStatus === 'connected' && (
                 <button
                   onClick={() => {setShowAddForm(true); setShowEditForm(false);}}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-4 rounded-2xl hover:from-purple-700 hover:to-pink-700 transition-all font-bold shadow-lg shadow-purple-500/50 flex items-center gap-2 mx-auto hover:scale-105"
                 >
+                  <FiPlus className="w-5 h-5" />
                   Add Your First Product
                 </button>
               )}
@@ -453,22 +591,24 @@ export default function ProductsPage() {
 
       {/* Add/Edit Product Modal */}
       {(showAddForm || showEditForm) && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-purple-500/20 shadow-2xl">
+            <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-5 rounded-t-3xl">
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold text-gray-900">
+                <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                  {showEditForm ? <FiEdit2 className="w-6 h-6" /> : <FiPlus className="w-6 h-6" />}
                   {showEditForm ? 'Edit Product' : 'Add New Product'}
                 </h2>
-                <button onClick={resetForm} className="text-gray-500 hover:text-gray-700 text-2xl">
-                  ✕
+                <button onClick={resetForm} className="text-white/80 hover:text-white transition-colors">
+                  <FiX className="w-6 h-6" />
                 </button>
               </div>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                  <FiTag className="text-purple-400" />
                   Product Name *
                 </label>
                 <input
@@ -476,14 +616,15 @@ export default function ProductsPage() {
                   name="product_name"
                   value={formData.product_name}
                   onChange={handleInputChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 bg-gray-700/50 border border-purple-500/30 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-gray-500"
                   placeholder="Enter product name"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                  <FiLayers className="text-purple-400" />
                   Description
                 </label>
                 <textarea
@@ -491,14 +632,15 @@ export default function ProductsPage() {
                   value={formData.description}
                   onChange={handleInputChange}
                   rows="3"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 bg-gray-700/50 border border-purple-500/30 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-gray-500"
                   placeholder="Describe your product..."
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                    <FiDollarSign className="text-purple-400" />
                     Price * (₨)
                   </label>
                   <input
@@ -507,14 +649,15 @@ export default function ProductsPage() {
                     name="price"
                     value={formData.price}
                     onChange={handleInputChange}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                    className="w-full p-3 bg-gray-700/50 border border-purple-500/30 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-gray-500"
                     placeholder="0"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                    <FiBox className="text-purple-400" />
                     Quantity *
                   </label>
                   <input
@@ -522,14 +665,15 @@ export default function ProductsPage() {
                     name="quantity"
                     value={formData.quantity}
                     onChange={handleInputChange}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                    className="w-full p-3 bg-gray-700/50 border border-purple-500/30 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-gray-500"
                     placeholder="0"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                    <FiPackage className="text-purple-400" />
                     Weight * (grams)
                   </label>
                   <input
@@ -538,7 +682,7 @@ export default function ProductsPage() {
                     name="weight"
                     value={formData.weight}
                     onChange={handleInputChange}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                    className="w-full p-3 bg-gray-700/50 border border-purple-500/30 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-gray-500"
                     placeholder="0"
                     required
                   />
@@ -546,7 +690,8 @@ export default function ProductsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                  <FiLayers className="text-purple-400" />
                   Category *
                 </label>
                 <input
@@ -554,28 +699,34 @@ export default function ProductsPage() {
                   name="catergory"
                   value={formData.catergory}
                   onChange={handleInputChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 bg-gray-700/50 border border-purple-500/30 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-gray-500"
                   placeholder="e.g., electronics, food, clothing"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tags
+                <label className="block text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                  <FiTag className="text-purple-400" />
+                  Product Tags (Keywords for Search & Recommendations)
                 </label>
                 <input
                   type="text"
                   name="tags"
                   value={formData.tags}
                   onChange={handleInputChange}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="e.g., summer, sale, new arrival (comma separated)"
+                  className="w-full p-3 bg-gray-700/50 border border-purple-500/30 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white placeholder-gray-500"
+                  placeholder="e.g., chocolate, sweet, cold, dessert, icecream (comma separated)"
                 />
+                <p className="text-xs text-gray-400 mt-2 flex items-start gap-2">
+                  <FiAlertCircle className="w-4 h-4 mt-0.5 text-purple-400 flex-shrink-0" />
+                  <span>Add keywords that describe this product (like Instagram hashtags). Examples: flavor, type, temperature, occasion. Used for product recommendations.</span>
+                </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-gray-300 mb-2 flex items-center gap-2">
+                  <FiImage className="text-purple-400" />
                   Product Images (Max 4)
                 </label>
                 <input
@@ -583,30 +734,34 @@ export default function ProductsPage() {
                   multiple
                   accept="image/*"
                   onChange={handleImageUpload}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full p-3 bg-gray-700/50 border border-purple-500/30 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700 file:cursor-pointer"
                   disabled={uploading}
                 />
                 {uploading && (
-                  <p className="text-blue-600 text-sm mt-2">Uploading images...</p>
+                  <p className="text-purple-400 text-sm mt-2 flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+                    Uploading images...
+                  </p>
                 )}
                 
                 {/* Display uploaded images */}
                 {formData.images && formData.images.length > 0 && (
                   <div className="mt-4">
-                    <p className="text-sm font-medium text-gray-700 mb-2">Uploaded Images:</p>
-                    <div className="grid grid-cols-4 gap-2">
+                    <p className="text-sm font-semibold text-gray-300 mb-3">Uploaded Images ({formData.images.length}/4):</p>
+                    <div className="grid grid-cols-4 gap-3">
                       {formData.images.map((image, index) => (
-                        <div key={index} className="relative">
+                        <div key={index} className="relative group">
                           <img
-                               src={typeof image === 'string' ? image : image.url}                            alt={typeof image === 'string' ? `Product ${index + 1}` : image.alt || `Product ${index + 1}`}
-                            className="w-full h-20 object-cover rounded-lg border"
+                            src={typeof image === 'string' ? image : image.url}
+                            alt={typeof image === 'string' ? `Product ${index + 1}` : image.alt || `Product ${index + 1}`}
+                            className="w-full h-24 object-cover rounded-xl border-2 border-purple-500/30 group-hover:border-purple-500/60 transition-all"
                           />
                           <button
                             type="button"
                             onClick={() => removeImage(index)}
-                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-7 h-7 flex items-center justify-center hover:bg-red-600 transition-all shadow-lg hover:scale-110"
                           >
-                            ✕
+                            <FiX className="w-4 h-4" />
                           </button>
                         </div>
                       ))}
@@ -615,20 +770,30 @@ export default function ProductsPage() {
                 )}
               </div>
 
-              <div className="flex gap-4 pt-4 border-t">
+              <div className="flex gap-4 pt-6 border-t border-purple-500/20">
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="flex-1 bg-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-400 transition-colors font-medium"
+                  className="flex-1 bg-gray-700 text-white py-3.5 rounded-xl hover:bg-gray-600 transition-all font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading || uploading}
-                  className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400 font-medium"
+                  className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3.5 rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 font-semibold shadow-lg shadow-purple-500/50 flex items-center justify-center gap-2"
                 >
-                  {loading ? 'Saving...' : showEditForm ? 'Update Product' : 'Add Product'}
+                  {loading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <FiCheckCircle className="w-5 h-5" />
+                      {showEditForm ? 'Update Product' : 'Add Product'}
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -638,17 +803,18 @@ export default function ProductsPage() {
 
       {/* QR Code Modal */}
       {showQRModal && selectedProductQR && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <div className="flex justify-between items-start mb-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl shadow-2xl max-w-md w-full p-6 border border-purple-500/20">
+            <div className="flex justify-between items-start mb-6">
               <div>
-                <h2 className="text-xl font-bold text-gray-800">
+                <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                  <FiDownload className="text-purple-400" />
                   Product QR Code
                 </h2>
-                <p className="text-gray-600 mt-1">
+                <p className="text-gray-300 mt-2 font-semibold">
                   {selectedProductQR.product_name}
                 </p>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 mt-1">
                   ID: {selectedProductQR.id}
                 </p>
               </div>
@@ -657,31 +823,51 @@ export default function ProductsPage() {
                   setShowQRModal(false);
                   setSelectedProductQR(null);
                 }}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
+                className="text-gray-400 hover:text-white transition-colors"
               >
-                ✕
+                <FiX className="w-6 h-6" />
               </button>
             </div>
 
             <div className="text-center">
-              <img
-                src={selectedProductQR.qrCodeImage}
-                alt="Product QR Code"
-                className="mx-auto border-4 border-gray-200 rounded-lg"
-              />
+              <div className="bg-white p-4 rounded-2xl mb-6">
+                <img
+                  src={selectedProductQR.qrCodeImage}
+                  alt="Product QR Code"
+                  className="mx-auto"
+                />
+              </div>
               <button
                 onClick={handleDownloadQR}
-                className="mt-4 w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition"
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-4 rounded-2xl hover:from-purple-700 hover:to-pink-700 transition-all font-bold shadow-lg shadow-purple-500/50 flex items-center justify-center gap-2 hover:scale-105"
               >
+                <FiDownload className="w-5 h-5" />
                 Download QR Code
               </button>
-              <p className="text-sm text-gray-600 mt-3">
+              <p className="text-sm text-gray-400 mt-4 flex items-center justify-center gap-2">
+                <FiAlertCircle className="w-4 h-4" />
                 Print this QR code and attach it to the product
               </p>
             </div>
           </div>
         </div>
       )}
+
+      {/* Product Modal */}
+      <ProductModal
+        isOpen={modal.isOpen}
+        onClose={closeModal}
+        type={modal.type}
+        message={modal.message}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={deleteModal.isOpen}
+        onClose={closeDeleteModal}
+        onConfirm={confirmDelete}
+        productName={deleteModal.productName}
+      />
     </div>
   );
 }

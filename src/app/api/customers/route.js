@@ -75,6 +75,8 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const customerId = searchParams.get('id');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '8');
 
     if (customerId) {
       // Get specific customer with QR code
@@ -108,11 +110,28 @@ export async function GET(request) {
       });
     }
 
-    // Get all customers
+    // Calculate offset for pagination
+    const offset = (page - 1) * limit;
+
+    // Get total count
+    const { count, error: countError } = await supabase
+      .from('Customer')
+      .select('*', { count: 'exact', head: true });
+
+    if (countError) {
+      console.error('Count customers error:', countError);
+      return Response.json(
+        { success: false, error: 'Failed to count customers' },
+        { status: 500 }
+      );
+    }
+
+    // Get paginated customers
     const { data: customers, error } = await supabase
       .from('Customer')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) {
       console.error('Get customers error:', error);
@@ -122,9 +141,15 @@ export async function GET(request) {
       );
     }
 
+    const totalPages = Math.ceil(count / limit);
+
     return Response.json({
       success: true,
-      customers
+      customers,
+      total: count,
+      page: page,
+      limit: limit,
+      totalPages: totalPages
     });
 
   } catch (error) {

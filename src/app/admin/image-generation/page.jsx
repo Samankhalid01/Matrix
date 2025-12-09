@@ -1,5 +1,15 @@
 'use client';
 import { useState } from 'react';
+import { 
+  FiImage, 
+  FiDownload, 
+  FiRefreshCw, 
+  FiCheckCircle, 
+  FiAlertCircle, 
+  FiZap,
+  FiLayers,
+  FiTrendingUp
+} from 'react-icons/fi';
 
 export default function ImageGenerationPage() {
   const [prompt, setPrompt] = useState('');
@@ -139,37 +149,54 @@ export default function ImageGenerationPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="p-6 min-h-screen space-y-8">
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Generate Advertisement Images</h1>
-        <p className="text-gray-600 mb-4">
-          Create stunning advertisement images using Cloudflare AI. Perfect for discount promotions, product showcases, and marketing campaigns.
-        </p>
-        
-        {/* API Test Section */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-medium text-blue-900">Cloudflare AI Status</h3>
-              <p className="text-sm text-blue-700">{apiStatus || 'Click test to check Cloudflare Worker connection'}</p>
-            </div>
-            <button
-              onClick={testApiConnection}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-            >
-              🔍 Test Cloudflare API
-            </button>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-4xl font-bold text-white drop-shadow-lg flex items-center gap-3">
+            <FiImage className="text-purple-400" />
+            AI Advertisement Generator
+          </h1>
+          <p className="text-gray-300 mt-3">
+            Create stunning advertisement images using Cloudflare AI
+          </p>
+        </div>
+      </div>
+
+      {/* API Status Card */}
+      <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 backdrop-blur-xl rounded-3xl border border-purple-500/20 p-6 shadow-2xl">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-white text-lg flex items-center gap-2 mb-2">
+              <FiZap className="text-purple-400" />
+              Cloudflare AI Status
+            </h3>
+            <p className="text-gray-300 text-sm">
+              {apiStatus || 'Click test to check Cloudflare Worker connection'}
+            </p>
           </div>
+          <button
+            onClick={testApiConnection}
+            className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all font-bold shadow-lg shadow-purple-500/50 flex items-center gap-2 hover:scale-105"
+          >
+            <FiCheckCircle className="w-5 h-5" />
+            Test API Connection
+          </button>
         </div>
       </div>
 
       {/* Generation Form */}
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 backdrop-blur-xl rounded-3xl border border-purple-500/20 p-6 shadow-2xl">
+        <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+          <FiLayers className="text-purple-400" />
+          Create Your Advertisement
+        </h2>
+        
         <div className="space-y-6">
           {/* Prompt Input */}
           <div>
-            <label htmlFor="prompt" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="prompt" className="block text-sm font-bold text-purple-400 mb-3 flex items-center gap-2">
+              <FiTrendingUp className="w-4 h-4" />
               Advertisement Prompt *
             </label>
             <textarea
@@ -177,11 +204,11 @@ export default function ImageGenerationPage() {
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="e.g., A vibrant discount sale poster with 50% OFF text, modern retail store background, bright colors, professional marketing design"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              className="w-full px-4 py-3 bg-gray-700/50 border border-purple-500/30 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
               rows={4}
               maxLength={2000}
             />
-            <div className="text-right text-sm text-gray-500 mt-1">
+            <div className="text-right text-sm text-gray-400 mt-2">
               {prompt.length}/2000 characters
             </div>
           </div>
@@ -190,35 +217,34 @@ export default function ImageGenerationPage() {
           <button
             onClick={handleGenerateImages}
             disabled={loading || !prompt.trim()}
-            className={`w-full py-3 px-6 rounded-lg font-medium transition-colors ${
+            className={`w-full py-4 px-6 rounded-2xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 ${
               loading || !prompt.trim()
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 shadow-purple-500/50 hover:scale-105'
             }`}
           >
             {loading ? (
-              <span className="flex items-center justify-center">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <>
+                <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
                 Generating Images...
-              </span>
+              </>
             ) : (
-              '🎨 Generate with Cloudflare AI'
+              <>
+                <FiImage className="w-5 h-5" />
+                Generate with Cloudflare AI
+              </>
             )}
           </button>
 
           {/* Error Message */}
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <span className="text-red-400">⚠️</span>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-red-800">{error}</p>
-                </div>
+            <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4">
+              <div className="flex gap-3">
+                <FiAlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-300">{error}</p>
               </div>
             </div>
           )}
@@ -227,15 +253,17 @@ export default function ImageGenerationPage() {
 
       {/* Generated Images */}
       {generatedImages.length > 0 && (
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-6">Generated Images</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+        <div className="bg-gradient-to-br from-gray-800/80 to-gray-900/80 backdrop-blur-xl rounded-3xl border border-purple-500/20 p-6 shadow-2xl">
+          <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+            <FiImage className="text-purple-400" />
+            Generated Images
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {generatedImages.map((image, index) => (
-              <div key={index} className="bg-gray-50 rounded-lg p-4">
+              <div key={index} className="bg-gray-700/30 rounded-2xl p-4 border border-purple-500/20 hover:border-purple-500/40 transition-all">
                 <div className="relative group">
                   {image.isMock || image.isPlaceholder ? (
-                    // Placeholder or mock image
-                    <div className="w-full h-64 rounded-lg overflow-hidden">
+                    <div className="w-full h-64 rounded-xl overflow-hidden">
                       {image.fullImageUrl ? (
                         <img
                           src={image.fullImageUrl}
@@ -243,26 +271,24 @@ export default function ImageGenerationPage() {
                           className="w-full h-full object-cover"
                           onError={(e) => {
                             console.error('Placeholder image failed to load:', e);
-                            // Fallback to simple colored div
                             e.target.style.display = 'none';
                             e.target.nextSibling.style.display = 'flex';
                           }}
                         />
                       ) : null}
-                      <div className="w-full h-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center" style={{display: 'none'}}>
+                      <div className="w-full h-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center" style={{display: 'none'}}>
                         <div className="text-center text-white">
-                          <div className="text-4xl mb-2">🎨</div>
+                          <FiImage className="w-16 h-16 mx-auto mb-3" />
                           <p className="text-sm font-medium">Generated Image {index + 1}</p>
                           <p className="text-xs opacity-75 mt-1">Worker Configuration Needed</p>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    // Real generated image
                     <img
                       src={image.fullImageUrl || `data:image/png;base64,${image.imageBytes}`}
                       alt={`Generated advertisement ${index + 1}`}
-                      className="w-full h-64 object-cover rounded-lg"
+                      className="w-full h-64 object-cover rounded-xl"
                       onError={(e) => {
                         console.error('Image failed to load:', e);
                         setError('Failed to display generated image. The image data may be corrupted.');
@@ -271,45 +297,46 @@ export default function ImageGenerationPage() {
                     />
                   )}
                   
-                  {/* Download button overlay */}
-                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center">
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 rounded-xl flex items-center justify-center">
                     <button
                       onClick={() => downloadImage(image.imageBytes, index)}
-                      className="opacity-0 group-hover:opacity-100 bg-white text-gray-900 px-4 py-2 rounded-lg font-medium transition-opacity duration-200 hover:bg-gray-100"
+                      className="opacity-0 group-hover:opacity-100 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg flex items-center gap-2 hover:scale-105"
                     >
-                      📥 Download
+                      <FiDownload className="w-5 h-5" />
+                      Download
                     </button>
                   </div>
                 </div>
                 
-                {/* Image Info */}
                 <div className="mt-4 space-y-2">
-                  <div className="flex justify-between text-sm text-gray-600">
-                    <span>Image {index + 1}</span>
-                    <span>Cloudflare AI</span>
+                  <div className="flex justify-between text-sm text-gray-300">
+                    <span className="font-semibold">Image {index + 1}</span>
+                    <span className="text-purple-400">Cloudflare AI</span>
                   </div>
                   {image.isPlaceholder && (
-                    <div className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
-                      ⚠️ Placeholder Image - Cloudflare Worker needs configuration
+                    <div className="text-xs text-orange-300 bg-orange-900/20 px-3 py-2 rounded-lg border border-orange-500/30 flex items-center gap-2">
+                      <FiAlertCircle className="w-4 h-4" />
+                      Placeholder Image - Cloudflare Worker needs configuration
                     </div>
                   )}
                   {image.isMock && !image.isPlaceholder && (
-                    <div className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
+                    <div className="text-xs text-orange-300 bg-orange-900/20 px-3 py-2 rounded-lg border border-orange-500/30">
                       {image.aiEnhanced ? 'AI-Enhanced Demo Mode' : 'Demo Mode - Connect to Cloudflare API for real generation'}
                     </div>
                   )}
                   {image.aiEnhanced && (
-                    <div className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
-                      ✨ Enhanced with Google Gemini AI
+                    <div className="text-xs text-green-300 bg-green-900/20 px-3 py-2 rounded-lg border border-green-500/30 flex items-center gap-2">
+                      <FiCheckCircle className="w-4 h-4" />
+                      Enhanced with Google Gemini AI
                     </div>
                   )}
                   {image.aiDescription && (
                     <div className="mt-2">
                       <details className="text-xs">
-                        <summary className="cursor-pointer text-blue-600 hover:text-blue-800 font-medium">
+                        <summary className="cursor-pointer text-purple-400 hover:text-purple-300 font-medium">
                           View AI Description
                         </summary>
-                        <div className="mt-2 p-2 bg-blue-50 rounded text-blue-800 max-h-24 overflow-y-auto">
+                        <div className="mt-2 p-3 bg-purple-900/20 rounded-lg text-purple-300 max-h-24 overflow-y-auto border border-purple-500/20">
                           {image.aiDescription}
                         </div>
                       </details>
@@ -320,39 +347,66 @@ export default function ImageGenerationPage() {
             ))}
           </div>
           
-          {/* Regenerate Button */}
           <div className="mt-6 text-center">
             <button
               onClick={handleGenerateImages}
               disabled={loading}
-              className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+              className="bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white px-8 py-4 rounded-2xl font-bold transition-all shadow-lg shadow-green-500/50 flex items-center gap-2 mx-auto hover:scale-105"
             >
-              🔄 Generate New Variations
+              <FiRefreshCw className="w-5 h-5" />
+              Generate New Variations
             </button>
           </div>
         </div>
       )}
 
       {/* Tips Section */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-blue-900 mb-3">💡 Prompt Writing Tips</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-800">
-          <div>
-            <h4 className="font-medium mb-2">For Discount Ads:</h4>
-            <ul className="space-y-1 text-blue-700">
-              <li>• Include specific discount percentage</li>
-              <li>• Mention &quot;sale&quot;, &quot;discount&quot;, &quot;offer&quot;</li>
-              <li>• Add &quot;bright colors&quot;, &quot;eye-catching&quot;</li>
-              <li>• Specify store type (retail, fashion, electronics)</li>
+      <div className="bg-gradient-to-br from-purple-900/20 to-pink-900/20 border border-purple-500/30 rounded-3xl p-6 backdrop-blur-xl">
+        <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+          <FiZap className="text-purple-400" />
+          Prompt Writing Tips
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+          <div className="bg-gray-800/50 rounded-2xl p-4 border border-purple-500/20">
+            <h4 className="font-bold text-purple-400 mb-3">For Discount Ads:</h4>
+            <ul className="space-y-2 text-gray-300">
+              <li className="flex items-start gap-2">
+                <FiCheckCircle className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
+                Include specific discount percentage
+              </li>
+              <li className="flex items-start gap-2">
+                <FiCheckCircle className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
+                Mention &quot;sale&quot;, &quot;discount&quot;, &quot;offer&quot;
+              </li>
+              <li className="flex items-start gap-2">
+                <FiCheckCircle className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
+                Add &quot;bright colors&quot;, &quot;eye-catching&quot;
+              </li>
+              <li className="flex items-start gap-2">
+                <FiCheckCircle className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
+                Specify store type (retail, fashion, electronics)
+              </li>
             </ul>
           </div>
-          <div>
-            <h4 className="font-medium mb-2">Style Keywords:</h4>
-            <ul className="space-y-1 text-blue-700">
-              <li>• &quot;professional marketing design&quot;</li>
-              <li>• &quot;modern advertisement poster&quot;</li>
-              <li>• &quot;vibrant promotional banner&quot;</li>
-              <li>• &quot;high-quality commercial style&quot;</li>
+          <div className="bg-gray-800/50 rounded-2xl p-4 border border-purple-500/20">
+            <h4 className="font-bold text-purple-400 mb-3">Style Keywords:</h4>
+            <ul className="space-y-2 text-gray-300">
+              <li className="flex items-start gap-2">
+                <FiCheckCircle className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
+                &quot;professional marketing design&quot;
+              </li>
+              <li className="flex items-start gap-2">
+                <FiCheckCircle className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
+                &quot;modern advertisement poster&quot;
+              </li>
+              <li className="flex items-start gap-2">
+                <FiCheckCircle className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
+                &quot;vibrant promotional banner&quot;
+              </li>
+              <li className="flex items-start gap-2">
+                <FiCheckCircle className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
+                &quot;high-quality commercial style&quot;
+              </li>
             </ul>
           </div>
         </div>

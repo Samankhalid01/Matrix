@@ -18,8 +18,14 @@ app.add_middleware(
 
 # Load SentenceTransformer model (384-dim)
 print("🔄 Loading SentenceTransformer model...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
-print("✅ Model loaded successfully!")
+print("⏳ First-time download may take a few minutes...")
+try:
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    print("✅ Model loaded successfully!")
+except Exception as e:
+    print(f"❌ Error loading model: {e}")
+    print("⚠️  Make sure you have internet connection for first-time model download")
+    raise
 
 class EmbeddingRequest(BaseModel):
     text: str
@@ -30,7 +36,7 @@ class BatchEmbeddingRequest(BaseModel):
 class ProductEmbeddingRequest(BaseModel):
     product_name: str
     description: Optional[str] = ""
-    category: Optional[str] = ""
+    category: Optional[str] = ""  # Note: DB has 'catergory' typo, but we accept 'category' in API
     tags: Optional[str] = ""
 
 @app.get("/")
@@ -39,7 +45,8 @@ def root():
         "service": "MATRIX Embeddings Service",
         "status": "running",
         "model": "all-MiniLM-L6-v2",
-        "dimensions": 384
+        "dimensions": 384,
+        "endpoints": ["/embed", "/embed/batch", "/embed/product"]
     }
 
 @app.get("/health")

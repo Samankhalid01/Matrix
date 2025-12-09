@@ -6,6 +6,116 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+// Helper: Generate notifications from real product/sales data
+async function generateAutoNotifications() {
+  try {
+    const notifications = [];
+
+    // 1. Low stock notifications from products
+    const { data: lowStockProducts } = await supabase
+      .from('Product')
+      .select('id, product_name, quantity, min_stock_threshold, category')
+      .order('quantity', { ascending: true })
+      .limit(20);
+
+    for (const product of lowStockProducts || []) {
+      const stock = product.quantity || 0;
+      const threshold = product.min_stock_threshold || 10;
+      
+      if (stock <= threshold) {
+        // Check if notification already exists
+        const { data: existing } = await supabase
+          .from('Notification')
+          .select('id')
+          .eq('notification_type', 'stock_alert')
+          .ilike('title', `%${product.product_name}%`)
+          .eq('is_read', false)
+          .single();
+
+        if (!existing) {
+          const priority = stock === 0 ? 'critical' : stock <= 5 ? 'high' : 'medium';
+          const { data: newNotif } = await supabase
+            .from('Notification')
+            .insert({
+              recipient_type: 'admin',
+              notification_type: 'stock_alert',
+              title: stock === 0 
+                ? `OUT OF STOCK: ${product.product_name}`
+                : `Low Stock Alert: ${product.product_name}`,
+              message: stock === 0 
+                ? `${product.product_name} is completely out of stock! Immediate reorder required.`
+                : `${product.product_name} has only ${stock} units remaining (threshold: ${threshold}). Consider reordering soon.`,
+              priority,
+              action_url: '/admin/inventory',
+              metadata: { product_id: product.id, current_stock: stock, category: product.category },
+              is_read: false
+            })
+            .select()
+            .single();
+
+          if (newNotif) notifications.push(newNotif);
+        }
+      }
+    }
+
+    // 2. High sales notifications from recent transactions
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const { data: recentSales } = await supabase
+      .from('TransactionItem')
+      .select('product_name, quantity, total_price')
+      .gte('created_at', yesterday.toISOString());
+
+    // Aggregate sales by product
+    const salesByProduct = {};
+    for (const sale of recentSales || []) {
+      if (!salesByProduct[sale.product_name]) {
+        salesByProduct[sale.product_name] = { quantity: 0, revenue: 0 };
+      }
+      salesByProduct[sale.product_name].quantity += sale.quantity || 0;
+      salesByProduct[sale.product_name].revenue += sale.total_price || 0;
+    }
+
+    // Find top sellers (more than 10 units in last 24h)
+    for (const [productName, data] of Object.entries(salesByProduct)) {
+      if (data.quantity >= 10) {
+        const { data: existing } = await supabase
+          .from('Notification')
+          .select('id')
+          .eq('notification_type', 'sales_milestone')
+          .ilike('title', `%${productName}%`)
+          .eq('is_read', false)
+          .single();
+
+        if (!existing) {
+          const { data: newNotif } = await supabase
+            .from('Notification')
+            .insert({
+              recipient_type: 'admin',
+              notification_type: 'sales_milestone',
+              title: `High Demand: ${productName}`,
+              message: `${productName} sold ${data.quantity} units in the last 24 hours, generating $${data.revenue.toFixed(2)} in revenue. Consider increasing stock.`,
+              priority: 'medium',
+              action_url: '/admin/demand-prediction',
+              metadata: { product_name: productName, units_sold: data.quantity, revenue: data.revenue },
+              is_read: false
+            })
+            .select()
+            .single();
+
+          if (newNotif) notifications.push(newNotif);
+        }
+      }
+    }
+
+    return notifications;
+  } catch (error) {
+    console.error('Error generating auto notifications:', error);
+    return [];
+  }
+}
+
 // GET: Fetch all notifications (with filters)
 export async function GET(request) {
   try {
@@ -15,6 +125,12 @@ export async function GET(request) {
     const isRead = searchParams.get('is_read'); // true/false
     const priority = searchParams.get('priority'); // low, medium, high, critical
     const limit = parseInt(searchParams.get('limit')) || 50;
+    const autoGenerate = searchParams.get('auto_generate') !== 'false';
+
+    // Auto-generate notifications from real data
+    if (autoGenerate && recipientType === 'admin') {
+      await generateAutoNotifications();
+    }
 
     let query = supabase
       .from('Notification')

@@ -1,11 +1,52 @@
 'use client';
 import { useState } from 'react';
 import DashboardLayout from '@/components/admin/DashboardLayout';
+import { AlertModal } from '@/components/Modal';
 
 const AnalyticsPage = () => {
   const [reportType, setReportType] = useState('sales');
   const [timeRange, setTimeRange] = useState('week');
   const [exportFormat, setExportFormat] = useState('pdf');
+  const [exporting, setExporting] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      console.log('📊 Exporting report:', { format: exportFormat, period: timeRange });
+
+      // Call export API
+      const response = await fetch(`/api/analytics/export?format=${exportFormat}&period=${timeRange}`);
+      
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+
+      // Get the blob
+      const blob = await response.blob();
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `analytics-report-${timeRange}.${exportFormat}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      console.log('✅ Export successful');
+      setShowSuccessModal(true);
+    } catch (error) {
+      console.error('❌ Export error:', error);
+      setErrorMessage(error.message);
+      setShowErrorModal(true);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -20,10 +61,13 @@ const AnalyticsPage = () => {
             >
               <option value="pdf">Export as PDF</option>
               <option value="csv">Export as CSV</option>
-              <option value="excel">Export as Excel</option>
             </select>
-            <button className="px-4 py-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600">
-              Export Report
+            <button 
+              onClick={handleExport}
+              disabled={exporting}
+              className="px-4 py-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exporting ? 'Exporting...' : 'Export Report'}
             </button>
           </div>
         </div>

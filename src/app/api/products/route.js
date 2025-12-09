@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
 import { v2 as cloudinary } from 'cloudinary';
 
 // Configure Cloudinary
@@ -38,18 +38,24 @@ async function generateEmbedding(productData) {
   }
 }
 
-// GET - Fetch all products or search
+// GET - Fetch all products or search with pagination
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
     const category = searchParams.get('category');
     const inStock = searchParams.get('inStock');
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '12');
+    
+    // Calculate offset for pagination
+    const offset = (page - 1) * limit;
 
     let query = supabase
       .from('Product')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     // Search by name or description
     if (search) {
@@ -66,7 +72,7 @@ export async function GET(request) {
       query = query.eq('in_stock', inStock === 'true');
     }
 
-    const { data: products, error } = await query;
+    const { data: products, error, count } = await query;
 
     if (error) {
       console.error('Supabase error:', error);
@@ -76,10 +82,17 @@ export async function GET(request) {
       );
     }
 
+    const total = count || 0;
+    const hasMore = offset + products.length < total;
+
     return NextResponse.json({
       success: true,
       data: products,
-      count: products.length
+      count: products.length,
+      total: total,
+      page: page,
+      limit: limit,
+      hasMore: hasMore
     });
 
   } catch (error) {
@@ -103,8 +116,7 @@ export async function POST(request) {
       quantity, 
       weight,
       tags,
-      images, // Array of base64 or URLs
-      qrcode 
+      images // Array of base64 or URLs
     } = body;
 
     // Validate required fields
@@ -157,7 +169,7 @@ export async function POST(request) {
       console.log('⚠️ Embedding not generated (service may be offline)');
     }
 
-    // Insert product into Supabase
+    // Insert product into Supabase (QR code will be generated on-demand based on product ID)
     const { data: product, error } = await supabase
       .from('Product')
       .insert([
@@ -170,7 +182,6 @@ export async function POST(request) {
           weight: parseInt(weight),
           images: uploadedImageUrls,
           tags: tags?.trim(),
-          qrcode: qrcode,
           in_stock: (quantity || 0) > 0,
           embedding: embedding
         }
@@ -215,8 +226,7 @@ export async function PUT(request) {
       quantity, 
       weight,
       tags,
-      images,
-      qrcode 
+      images
     } = body;
 
     if (!id) {
@@ -234,7 +244,6 @@ export async function PUT(request) {
     if (price) updateData.price = parseInt(price);
     if (weight) updateData.weight = parseInt(weight);
     if (tags) updateData.tags = tags.trim();
-    if (qrcode) updateData.qrcode = qrcode;
     
     if (quantity !== undefined) {
       updateData.quantity = parseInt(quantity);
@@ -323,6 +332,8 @@ export async function DELETE(request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
+    console.log('DELETE request - ID:', id);
+
     if (!id) {
       return NextResponse.json(
         { success: false, error: 'Product ID is required' },
@@ -330,21 +341,53 @@ export async function DELETE(request) {
       );
     }
 
-    // Get product to delete images from Cloudinary
-    const { data: product } = await supabase
+    // Convert ID to integer
+    const productId = parseInt(id);
+    
+    if (isNaN(productId)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid product ID format' },
+        { status: 400 }
+      );
+    }
+
+    console.log('Attempting to delete product with ID:', productId);
+
+    // First check if product exists
+    const { data: existingProduct, error: checkError } = await supabaseAdmin
       .from('Product')
-      .select('images')
-      .eq('id', id)
-      .single();
+      .select('id, images')
+      .eq('id', productId)
+      .maybeSingle();
+
+    if (checkError) {
+      console.error('Error checking product existence:', checkError);
+      return NextResponse.json(
+        { success: false, error: `Database error: ${checkError.message}` },
+        { status: 500 }
+      );
+    }
+
+    if (!existingProduct) {
+      console.error('Product not found with ID:', productId);
+      return NextResponse.json(
+        { success: false, error: 'Product not found' },
+        { status: 404 }
+      );
+    }
+
+    console.log('Product found:', existingProduct);
 
     // Delete images from Cloudinary
-    if (product?.images && product.images.length > 0) {
-      for (const imageUrl of product.images) {
+    if (existingProduct?.images && existingProduct.images.length > 0) {
+      console.log('Deleting images from Cloudinary:', existingProduct.images);
+      for (const imageUrl of existingProduct.images) {
         try {
           // Extract public_id from Cloudinary URL
           const matches = imageUrl.match(/\/matrix-products\/(.+)\./);
           if (matches && matches[1]) {
             await cloudinary.uploader.destroy(`matrix-products/${matches[1]}`);
+            console.log('Deleted image:', matches[1]);
           }
         } catch (deleteError) {
           console.error('Failed to delete image from Cloudinary:', deleteError);
@@ -352,19 +395,21 @@ export async function DELETE(request) {
       }
     }
 
-    // Delete product from Supabase
-    const { error } = await supabase
+    // Delete product from Supabase (use admin client to bypass RLS)
+    const { error } = await supabaseAdmin
       .from('Product')
       .delete()
-      .eq('id', id);
+      .eq('id', productId);
 
     if (error) {
-      console.error('Supabase error:', error);
+      console.error('Supabase delete error:', error);
       return NextResponse.json(
-        { success: false, error: 'Failed to delete product' },
+        { success: false, error: `Failed to delete product: ${error.message}` },
         { status: 500 }
       );
     }
+
+    console.log('Product deleted successfully');
 
     return NextResponse.json({
       success: true,
